@@ -28,22 +28,21 @@ cp .env.example .env
 # 3. Generate secure JWT secret (REQUIRED)
 echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
 
-# 4. Configure CORS and base URL (REQUIRED for UI access)
-echo "APP_BASE_URL=http://localhost:3000" >> .env
-echo "APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080" >> .env
+# 4. Configure database (MySQL runs in its own container)
+# Edit .env with: SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
 
-# 5. Start the application
+# 5. Initialize database (run once, outside Docker)
+mysql -h <mysql-host> -u <user> -p < scripts/init-db.sql
+
+# 6. Start the application
 docker compose up -d
 
-# 5. Check status
+# 7. Check status
 docker compose ps
-
-# Check API service specifically
-docker compose ps miniurl-api
-docker compose logs -f app
+docker compose logs -f miniurl-api
 ```
 
-**Access:** http://localhost:8080  
+**Access:** http://localhost:8080
 **Default login:** admin / admin123# (⚠️ CHANGE IMMEDIATELY!)
 
 ### Option 2: Local Development
@@ -55,22 +54,25 @@ docker compose logs -f app
 docker run -d --name mysql -e MYSQL_ROOT_PASSWORD=rootpass \
   -e MYSQL_DATABASE=miniurldb -p 3306:3306 mysql:8.0
 
-# 2. Clone and configure
+# 2. Initialize database
+mysql -h localhost -u root -prootpass miniurldb < scripts/init-db.sql
+
+# 3. Clone and configure
 git clone https://github.com/gallantsuri1/miniurl.git
 cd miniurl
 cp .env.example .env
 echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
 
-# 3. Configure CORS and base URL (REQUIRED for UI access)
+# 4. Configure CORS and base URL (REQUIRED for UI access)
 export APP_BASE_URL=http://localhost:3000
 export APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
 
-# 4. Build and run
+# 5. Build and run
 mvn clean package -DskipTests
 java -jar target/miniurl-api-1.0.0.jar --spring.profiles.active=dev
 ```
 
-**Access:** http://localhost:8080  
+**Access:** http://localhost:8080
 **Swagger UI:** http://localhost:8080/swagger-ui.html (dev mode only)
 
 ### Option 3: Development Mode with Hot Reload
@@ -80,9 +82,13 @@ git clone https://github.com/gallantsuri1/miniurl.git
 cd miniurl
 cp .env.example .env
 echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
-echo "APP_BASE_URL=http://localhost:3000" >> .env
+echo "APP_BASE_URL=http://localhost:8080" >> .env
 echo "APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080" >> .env
 
+# Ensure MySQL is running locally and database is initialized:
+mysql -h localhost -u root -prootpass miniurldb < scripts/init-db.sql
+
+# Start with hot reload (connects to MySQL on host via host.docker.internal)
 docker compose -f docker-compose.dev.yml up
 ```
 
@@ -211,31 +217,28 @@ java -jar target/miniurl-api-1.0.0.jar
 
 ## 🐳 Docker Deployment
 
-### Using Published Docker Hub Image
+MySQL runs in its own container — the `docker-compose.yml` only manages the API container.
 
-```bash
-# Pull latest image
-docker pull miniurl/miniurl-api:latest
+### Prerequisites
 
-# Run
-docker run -d --name miniurl \
-  -e SPRING_DATASOURCE_URL="jdbc:mysql://your-mysql:3306/miniurldb" \
-  -e SPRING_DATASOURCE_USERNAME="root" \
-  -e SPRING_DATASOURCE_PASSWORD="yourpassword" \
-  -e APP_JWT_SECRET="your-secure-jwt-secret-min-32-chars" \
-  -e SPRING_PROFILES_ACTIVE=prod \
-  -p 8080:8080 \
-  miniurl/miniurl-api:latest
-```
+- Docker & Docker Compose installed
+- MySQL instance accessible from the Docker network
+- Database initialized with `scripts/init-db.sql` (manual step)
 
 ### Using Docker Compose
 
 ```bash
-# Configure
+# 1. Configure environment
 cp .env.example .env
+
+# Edit .env with your values
+# Required: SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, APP_JWT_SECRET
 echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
 
-# Start (production mode)
+# 2. Initialize database (run once, outside Docker)
+mysql -h <mysql-host> -u <user> -p < scripts/init-db.sql
+
+# 3. Start the API
 docker compose up -d
 
 # View logs
@@ -245,15 +248,30 @@ docker compose logs -f miniurl-api
 docker compose down
 ```
 
+### Using Published Docker Hub Image
+
+```bash
+docker pull miniurl/miniurl-api:latest
+
+docker run -d --name miniurl \
+  -e SPRING_DATASOURCE_URL="jdbc:mysql://<mysql-host>:3306/miniurldb?useSSL=false&serverTimezone=UTC" \
+  -e SPRING_DATASOURCE_USERNAME="<db-user>" \
+  -e SPRING_DATASOURCE_PASSWORD="<db-password>" \
+  -e APP_JWT_SECRET="your-secure-jwt-secret-min-32-chars" \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -p 8080:8080 \
+  miniurl/miniurl-api:latest
+```
+
 ### Build Locally
 
 ```bash
 docker build -t miniurl-api:local .
 
 docker run -d --name miniurl-app \
-  -e SPRING_DATASOURCE_URL="jdbc:mysql://host.docker.internal:3306/miniurldb" \
-  -e SPRING_DATASOURCE_USERNAME="root" \
-  -e SPRING_DATASOURCE_PASSWORD="rootpass" \
+  -e SPRING_DATASOURCE_URL="jdbc:mysql://<mysql-host>:3306/miniurldb" \
+  -e SPRING_DATASOURCE_USERNAME="<db-user>" \
+  -e SPRING_DATASOURCE_PASSWORD="<db-password>" \
   -e APP_JWT_SECRET="your-secure-jwt-secret" \
   -e SPRING_PROFILES_ACTIVE=dev \
   -p 8080:8080 \
@@ -989,7 +1007,19 @@ miniurl/
 │   └── util/                    # Utilities (JwtUtil, etc.)
 ├── src/main/resources/
 │   ├── application.yml          # Application configuration
-│   └── logback-spring.xml       # Logging configuration
+│   ├── logback-spring.xml       # Logging configuration
+│   └── templates/
+│       └── email/               # Thymeleaf email templates (minimal UI)
+│           ├── otp-email.html
+│           ├── email-verification.html
+│           ├── password-reset.html
+│           ├── welcome-email.html
+│           ├── welcome-back-email.html
+│           ├── account-deletion.html
+│           ├── password-reset-confirmation.html
+│           ├── password-change-notification.html
+│           ├── invite-email.html
+│           └── registration-congratulations.html
 ├── src/test/java/com/miniurl/
 │   ├── integration/             # API integration tests
 │   ├── service/                 # Service unit tests
@@ -1669,22 +1699,16 @@ const response = await fetch('https://api.example.com/api/auth/login', {
 
 ### Backup and Restore
 
+Since MySQL runs in its own container, use standard MySQL backup tools:
+
 **Backup:**
 ```bash
-docker run --rm \
-  -v miniurl-api_mysql-data:/data \
-  -v $(pwd):/backup \
-  alpine tar czf /backup/mysql-backup-$(date +%Y%m%d).tar.gz -C /data .
+mysqldump -h <mysql-host> -u <user> -p miniurldb > backup-$(date +%Y%m%d).sql
 ```
 
 **Restore:**
 ```bash
-docker compose down
-docker run --rm \
-  -v miniurl-api_mysql-data:/data \
-  -v $(pwd):/backup \
-  alpine tar xzf /backup/mysql-backup-20260402.tar.gz -C /data
-docker compose up -d
+mysql -h <mysql-host> -u <user> -p miniurldb < backup-20260402.sql
 ```
 
 ### Troubleshooting
@@ -1700,14 +1724,14 @@ grep APP_CORS_ALLOWED_ORIGINS .env
 
 **Database Connection Issues:**
 ```bash
-# Check MySQL status
-docker compose ps
+# Check API service status
+docker compose ps miniurl-api
 
-# Check API service specifically
-docker compose ps miniurl-api mysql
+# View application logs
+docker compose logs miniurl-api
 
-# View MySQL logs
-docker compose logs mysql
+# Verify MySQL connectivity from container
+docker compose exec miniurl-api bash -c 'mysqladmin ping -h <mysql-host> -u <user> -p'
 ```
 
 **Application Won't Start:**
@@ -1717,7 +1741,8 @@ docker compose logs miniurl-api
 
 # Common issues:
 # - APP_JWT_SECRET not set or too short
-# - Database not ready (wait for MySQL health check)
+# - Database connection details incorrect
+# - Database not initialized (run scripts/init-db.sql)
 # - Port 8080 already in use
 ```
 

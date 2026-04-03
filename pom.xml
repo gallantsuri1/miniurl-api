@@ -82,6 +82,12 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- Thymeleaf for Email Templates -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+
         <!-- Bucket4j for Rate Limiting -->
         <dependency>
             <groupId>com.github.vladimir-bukhtoyarov</groupId>

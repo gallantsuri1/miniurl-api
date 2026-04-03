@@ -153,4 +153,18 @@ public class GlobalFlagService {
         globalFlagRepository.deleteById(id);
         logger.info("Deleted global flag with id: {}", id);
     }
+
+    /**
+     * Get the application display name from GLOBAL_APP_NAME global flag.
+     * Returns the feature_name if the flag exists and is enabled, null otherwise.
+     *
+     * @return the app name from global flags, or null if not configured/enabled
+     */
+    @Transactional(readOnly = true)
+    public String getGlobalAppName() {
+        return globalFlagRepository.findByFeatureKey("GLOBAL_APP_NAME")
+                .filter(GlobalFlag::isEnabled)
+                .map(gf -> gf.getFeature().getFeatureName())
+                .orElse(null);
+    }
 }

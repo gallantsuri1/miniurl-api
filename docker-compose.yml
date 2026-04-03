@@ -1,30 +1,6 @@
 version: '3.8'
 
 services:
-  # MySQL Database
-  mysql:
-    image: mysql:8.0
-    container_name: miniurl-api-mysql
-    restart: unless-stopped
-    environment:
-      # ⚠️ SECURITY: These environment variables MUST be set in .env file
-      # DO NOT use default values in production!
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: miniurldb
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - mysql-data:/var/lib/mysql
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    networks:
-      - miniurl-api-network
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   # MiniURL API Application - Uses Docker Hub image
   miniurl-api:
     image: miniurl/miniurl-api:latest
@@ -33,10 +9,10 @@ services:
     ports:
       - "${APP_PORT:-8080}:8080"
     environment:
-      # Database Configuration - REQUIRED
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/miniurldb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER}
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD}
+      # Database Configuration - REQUIRED (MySQL runs in its own container)
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
 
       # ⚠️ JWT Configuration - REQUIRED: Set APP_JWT_SECRET in .env
       # Application will FAIL TO START without a valid JWT secret
@@ -50,14 +26,10 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
 
       # Application Configuration
-      # For production:
-      #   APP_BASE_URL=https://api.example.com
       APP_BASE_URL: ${APP_BASE_URL:-https://api.example.com}
       APP_OTP_EXPIRY_MINUTES: 15
 
       # CORS Configuration - REQUIRED for frontend access
-      # For production with frontend on ui.example.com:
-      #   APP_CORS_ALLOWED_ORIGINS=https://ui.example.com
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://ui.example.com}
 
       # Spring Profile
@@ -65,9 +37,6 @@ services:
 
       # JVM Options
       JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC"
-    depends_on:
-      mysql:
-        condition: service_healthy
     networks:
       - miniurl-api-network
     healthcheck:
@@ -80,7 +49,3 @@ services:
 networks:
   miniurl-api-network:
     driver: bridge
-
-volumes:
-  mysql-data:
-    driver: local
