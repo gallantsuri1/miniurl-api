@@ -1,0 +1,5 @@
+# GitHub Personal Access Token with repo permissions
+github_token = "ghp_your_token_here"
+
+# Repository name (defaults to miniurl)
+# repository_name = "miniurl"

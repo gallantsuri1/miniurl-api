@@ -1,0 +1,63 @@
+# MiniURL Application Configuration - Production Profile
+# This profile disables Swagger/OpenAPI documentation and optimizes for production
+
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+  # MySQL Database Configuration for Production
+  datasource:
+    url: jdbc:mysql://${DATABASE_HOST:localhost}:${DATABASE_PORT:3306}/miniurldb?useSSL=${DATABASE_USE_SSL:false}&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${DATABASE_USERNAME:root}
+    password: ${DATABASE_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      minimum-idle: 10
+      maximum-pool-size: 50
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      leak-detection-threshold: 30000
+      pool-name: MiniURL API-Prod-HikariPool
+      initialization-fail-timeout: -1
+      connection-init-sql: SELECT 1
+      validation-timeout: 5000
+
+  # JPA Configuration for Production
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  # Thymeleaf - Enable caching for better performance
+  thymeleaf:
+    cache: true
+
+# Swagger/OpenAPI - DISABLED for production (security best practice)
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Logging - Production-friendly levels
+logging:
+  level:
+    com.miniurl: INFO
+    org.springframework.security: WARN
+    org.springframework.web: WARN
+    org.hibernate: WARN
+    org.thymeleaf: WARN
+    org.springframework.mail: WARN
+
+# Application Settings
+app:
+  name: MiniURL API
+  jwt:
+    secret: ${APP_JWT_SECRET}
+    expiration-ms: 3600000
