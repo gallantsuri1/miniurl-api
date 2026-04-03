@@ -122,23 +122,25 @@ public class SettingsController {
             List<Url> urls = urlRepository.findByUserId(user.getId());
 
             Map<String, Object> exportData = new HashMap<>();
-            exportData.put("user", Map.of(
-                "id", user.getId(),
-                "firstName", user.getFirstName(),
-                "lastName", user.getLastName(),
-                "email", user.getEmail(),
-                "username", user.getUsername(),
-                "role", user.getRole() != null ? user.getRole().getName() : "USER",
-                "createdAt", user.getCreatedAt(),
-                "lastLogin", user.getLastLogin()
-            ));
-            exportData.put("urls", urls.stream().map(url -> Map.of(
-                "id", url.getId(),
-                "originalUrl", url.getOriginalUrl(),
-                "shortCode", url.getShortCode(),
-                "accessCount", url.getAccessCount(),
-                "createdAt", url.getCreatedAt()
-            )).collect(Collectors.toList()));
+            Map<String, Object> userData = new HashMap<>();
+            userData.put("id", user.getId());
+            userData.put("firstName", user.getFirstName());
+            userData.put("lastName", user.getLastName());
+            userData.put("email", user.getEmail());
+            userData.put("username", user.getUsername());
+            userData.put("role", user.getRole() != null ? user.getRole().getName() : "USER");
+            userData.put("createdAt", user.getCreatedAt());
+            userData.put("lastLogin", user.getLastLogin());
+            exportData.put("user", userData);
+            exportData.put("urls", urls.stream().map(url -> {
+                Map<String, Object> urlData = new HashMap<>();
+                urlData.put("id", url.getId());
+                urlData.put("originalUrl", url.getOriginalUrl());
+                urlData.put("shortCode", url.getShortCode());
+                urlData.put("accessCount", url.getAccessCount());
+                urlData.put("createdAt", url.getCreatedAt());
+                return urlData;
+            }).collect(Collectors.toList()));
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
