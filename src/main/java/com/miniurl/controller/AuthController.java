@@ -439,6 +439,8 @@ public class AuthController {
             user.resetFailedLoginAttempts();
             userRepository.save(user);
 
+            authService.updateLastLogin(user.getId());
+
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
             String token = jwtUtil.generateToken(userDetails, user.getTokenVersion());
 
