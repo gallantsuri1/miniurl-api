@@ -129,13 +129,14 @@ CREATE TABLE IF NOT EXISTS features (
     INDEX idx_feature_key (feature_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert 9 master features (idempotent)
+-- Insert 10 master features (idempotent)
 INSERT INTO features (feature_key, feature_name, description) VALUES
-    ('USER_SIGNUP', 'User Sign Up', 'Allow new user registration'),
+    ('GLOBAL_USER_SIGNUP', 'User Sign Up', 'Allow new user registration (global)'),
+    ('GLOBAL_APP_NAME', 'MiniURL', 'A place for all your URL''s!'),
     ('PROFILE_PAGE', 'Profile Page', 'User profile management'),
     ('EXPORT_JSON', 'Export to JSON', 'Export user data as JSON'),
     ('URL_SHORTENING', 'URL Shortening', 'Create short URLs'),
-    ('DASHBOARD', 'Dashboard', 'User dashboard access'),
+    ('DASHBOARD', 'Dashboard', 'User dashboard'),
     ('SETTINGS_PAGE', 'Settings Page', 'Account settings and password change'),
     ('EMAIL_INVITE', 'Email Invitations', 'Send email invitations for user signup'),
     ('USER_MANAGEMENT', 'User Management', 'Admin user management'),
@@ -159,19 +160,19 @@ CREATE TABLE IF NOT EXISTS feature_flags (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Insert feature flags for USER role (role_id=2)
--- All 8 features enabled (excluding USER_SIGNUP which is global)
+-- EMAIL_INVITE, USER_MANAGEMENT, FEATURE_MANAGEMENT disabled for USER role
 INSERT INTO feature_flags (feature_id, role_id, enabled)
-SELECT f.id, 2, true 
-FROM features f 
+SELECT f.id, 2, CASE WHEN f.feature_key IN ('EMAIL_INVITE', 'USER_MANAGEMENT', 'FEATURE_MANAGEMENT') THEN false ELSE true END
+FROM features f
 WHERE f.feature_key IN (
-    'PROFILE_PAGE', 'EXPORT_JSON', 'URL_SHORTENING', 
-    'DASHBOARD', 'SETTINGS_PAGE', 'EMAIL_INVITE', 
+    'PROFILE_PAGE', 'EXPORT_JSON', 'URL_SHORTENING',
+    'DASHBOARD', 'SETTINGS_PAGE', 'EMAIL_INVITE',
     'USER_MANAGEMENT', 'FEATURE_MANAGEMENT'
 )
 ON DUPLICATE KEY UPDATE enabled = VALUES(enabled);
 
 -- Insert feature flags for ADMIN role (role_id=1)
--- All 8 features enabled (excluding USER_SIGNUP which is global)
+-- All 8 features enabled (excluding GLOBAL_USER_SIGNUP which is global)
 INSERT INTO feature_flags (feature_id, role_id, enabled)
 SELECT f.id, 1, true 
 FROM features f 
@@ -195,16 +196,16 @@ CREATE TABLE IF NOT EXISTS global_flags (
     UNIQUE KEY uk_global_feature (feature_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert USER_SIGNUP as global flag (enabled by default)
--- Uses INSERT IGNORE to prevent duplicates if feature already exists in global_flags
+-- Insert global flags (GLOBAL_USER_SIGNUP disabled, GLOBAL_APP_NAME enabled by default)
 INSERT IGNORE INTO global_flags (feature_id, enabled)
-SELECT id, true FROM features WHERE feature_key = 'USER_SIGNUP';
+SELECT id, CASE WHEN feature_key = 'GLOBAL_USER_SIGNUP' THEN false ELSE true END
+FROM features WHERE feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME');
 
--- Update enabled status if record already exists (idempotent)
+-- Update enabled status if records already exist (idempotent)
 UPDATE global_flags gf
 JOIN features f ON gf.feature_id = f.id
-SET gf.enabled = true
-WHERE f.feature_key = 'USER_SIGNUP';
+SET gf.enabled = CASE WHEN f.feature_key = 'GLOBAL_USER_SIGNUP' THEN false ELSE true END
+WHERE f.feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME');
 
 -- ===========================================
 -- DEFAULT DATA

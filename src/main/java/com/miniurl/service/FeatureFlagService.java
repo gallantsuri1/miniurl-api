@@ -6,6 +6,8 @@ import com.miniurl.entity.FeatureFlag;
 import com.miniurl.entity.Role;
 import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.repository.FeatureFlagRepository;
+import com.miniurl.repository.FeatureRepository;
+import com.miniurl.repository.RoleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,9 +26,15 @@ public class FeatureFlagService {
     private static final Logger logger = LoggerFactory.getLogger(FeatureFlagService.class);
 
     private final FeatureFlagRepository featureFlagRepository;
+    private final FeatureRepository featureRepository;
+    private final RoleRepository roleRepository;
 
-    public FeatureFlagService(FeatureFlagRepository featureFlagRepository) {
+    public FeatureFlagService(FeatureFlagRepository featureFlagRepository,
+                              FeatureRepository featureRepository,
+                              RoleRepository roleRepository) {
         this.featureFlagRepository = featureFlagRepository;
+        this.featureRepository = featureRepository;
+        this.roleRepository = roleRepository;
     }
 
     /**
@@ -122,16 +130,57 @@ public class FeatureFlagService {
         Feature feature = featureFlagRepository.findById(featureId)
             .map(FeatureFlag::getFeature)
             .orElseThrow(() -> new ResourceNotFoundException("Feature not found with id: " + featureId));
-        
+
         Role role = new Role();
         role.setId(roleId);
-        
+
         FeatureFlag featureFlag = new FeatureFlag(feature, role, enabled);
         featureFlagRepository.save(featureFlag);
-        
+
         logger.info("Created feature flag for '{}' (role ID: {})", feature.getFeatureKey(), roleId);
-        
+
         return new FeatureFlagDTO(featureFlag);
+    }
+
+    /**
+     * Create a new feature with role-based flags for ADMIN and USER roles.
+     * Creates the feature definition and feature flags for both roles.
+     *
+     * @param featureKey the feature key (e.g., "USER_SIGNUP")
+     * @param featureName the display name of the feature
+     * @param description the feature description
+     * @param adminEnabled whether the feature is enabled for ADMIN role
+     * @param userEnabled whether the feature is enabled for USER role
+     * @return the created feature flag DTO for the USER role
+     */
+    @Transactional
+    public FeatureFlagDTO createFeatureFlag(String featureKey, String featureName, String description,
+                                            boolean adminEnabled, boolean userEnabled) {
+        // Find or create the feature
+        Feature feature = featureRepository.findByFeatureKey(featureKey)
+            .orElseGet(() -> featureRepository.save(new Feature(featureKey, featureName, description)));
+
+        // Look up roles
+        Role adminRole = roleRepository.findByName("ADMIN")
+            .orElseThrow(() -> new ResourceNotFoundException("Role not found: ADMIN"));
+        Role userRole = roleRepository.findByName("USER")
+            .orElseThrow(() -> new ResourceNotFoundException("Role not found: USER"));
+
+        // Create or update ADMIN flag
+        FeatureFlag adminFlag = featureFlagRepository.findByFeatureKeyAndRoleId(featureKey, adminRole.getId())
+            .orElse(new FeatureFlag(feature, adminRole, adminEnabled));
+        adminFlag.setEnabled(adminEnabled);
+        featureFlagRepository.save(adminFlag);
+
+        // Create or update USER flag
+        FeatureFlag userFlag = featureFlagRepository.findByFeatureKeyAndRoleId(featureKey, userRole.getId())
+            .orElse(new FeatureFlag(feature, userRole, userEnabled));
+        userFlag.setEnabled(userEnabled);
+        FeatureFlag savedUserFlag = featureFlagRepository.save(userFlag);
+
+        logger.info("Created feature '{}' with ADMIN={}, USER={}", featureKey, adminEnabled, userEnabled);
+
+        return new FeatureFlagDTO(savedUserFlag);
     }
 
     /**

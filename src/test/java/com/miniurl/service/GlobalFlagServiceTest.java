@@ -166,6 +166,50 @@ class GlobalFlagServiceTest {
     }
 
     @Test
+    @DisplayName("createGlobalFlag with featureKey should create feature and global flag")
+    void createGlobalFlag_WithFeatureKey_ShouldCreateFeatureAndFlag() {
+        // Arrange
+        Feature newFeature = new Feature("TEST_GLOBAL", "Test Global", "Test description");
+        newFeature.setId(10L);
+        GlobalFlag newFlag = new GlobalFlag(newFeature, true);
+        newFlag.setId(20L);
+
+        when(featureRepository.findByFeatureKey("TEST_GLOBAL")).thenReturn(Optional.empty());
+        when(featureRepository.save(any(Feature.class))).thenReturn(newFeature);
+        when(globalFlagRepository.findByFeatureKey("TEST_GLOBAL")).thenReturn(Optional.empty());
+        when(globalFlagRepository.save(any(GlobalFlag.class))).thenReturn(newFlag);
+
+        // Act
+        GlobalFlagDTO result = globalFlagService.createGlobalFlag("TEST_GLOBAL", "Test Global", "Test description", true);
+
+        // Assert
+        assertNotNull(result);
+        verify(featureRepository).save(any(Feature.class));
+        verify(globalFlagRepository).save(any(GlobalFlag.class));
+    }
+
+    @Test
+    @DisplayName("createGlobalFlag with featureKey should update existing global flag")
+    void createGlobalFlag_WithFeatureKey_ShouldUpdateExistingFlag() {
+        // Arrange
+        GlobalFlag existingFlag = new GlobalFlag(testFeature, false);
+        existingFlag.setId(1L);
+
+        when(featureRepository.findByFeatureKey("USER_SIGNUP")).thenReturn(Optional.of(testFeature));
+        when(globalFlagRepository.findByFeatureKey("USER_SIGNUP")).thenReturn(Optional.of(existingFlag));
+        when(globalFlagRepository.save(any(GlobalFlag.class))).thenReturn(existingFlag);
+
+        // Act
+        GlobalFlagDTO result = globalFlagService.createGlobalFlag("USER_SIGNUP", "User Sign Up", "Allow registration", true);
+
+        // Assert
+        assertNotNull(result);
+        assertTrue(existingFlag.isEnabled());
+        verify(featureRepository, never()).save(any(Feature.class));
+        verify(globalFlagRepository).save(any(GlobalFlag.class));
+    }
+
+    @Test
     @DisplayName("deleteGlobalFlag should delete global flag")
     void deleteGlobalFlag_ShouldDelete() {
         // Arrange

@@ -94,8 +94,8 @@ public class SelfInviteController {
             @Parameter(description = "Email address to send invitation to", required = true, example = "user@example.com")
             @RequestParam("email") String email) {
         try {
-            // Check if USER_SIGNUP feature is enabled
-            if (!globalFlagService.isGlobalFeatureEnabled("USER_SIGNUP")) {
+            // Check if GLOBAL_USER_SIGNUP feature is enabled
+            if (!globalFlagService.isGlobalFeatureEnabled("GLOBAL_USER_SIGNUP")) {
                 return ResponseEntity.badRequest()
                         .body(ApiResponse.error("Self-signup is currently disabled"));
             }

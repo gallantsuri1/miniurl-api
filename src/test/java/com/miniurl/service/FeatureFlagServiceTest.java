@@ -6,6 +6,8 @@ import com.miniurl.entity.Role;
 import com.miniurl.entity.FeatureFlag;
 import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.repository.FeatureFlagRepository;
+import com.miniurl.repository.FeatureRepository;
+import com.miniurl.repository.RoleRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,12 @@ class FeatureFlagServiceTest {
 
     @Mock
     private FeatureFlagRepository featureFlagRepository;
+
+    @Mock
+    private FeatureRepository featureRepository;
+
+    @Mock
+    private RoleRepository roleRepository;
 
     @InjectMocks
     private FeatureFlagService featureFlagService;
@@ -159,6 +167,83 @@ class FeatureFlagServiceTest {
         // Assert
         assertNotNull(result);
         verify(featureFlagRepository).save(any(FeatureFlag.class));
+    }
+
+    @Test
+    @DisplayName("createFeatureFlag with featureKey should create feature and role flags")
+    void createFeatureFlag_WithFeatureKey_ShouldCreateFeatureAndRoleFlags() {
+        // Arrange
+        Role adminRole = new Role("ADMIN", "Administrator");
+        adminRole.setId(1L);
+        Role userRole = new Role("USER", "Regular user");
+        userRole.setId(2L);
+        Feature newFeature = new Feature("TEST_FEATURE", "Test Feature", "Test description");
+        newFeature.setId(10L);
+        FeatureFlag adminFlag = new FeatureFlag(newFeature, adminRole, true);
+        adminFlag.setId(20L);
+        FeatureFlag userFlag = new FeatureFlag(newFeature, userRole, false);
+        userFlag.setId(21L);
+
+        when(featureRepository.findByFeatureKey("TEST_FEATURE")).thenReturn(Optional.empty());
+        when(featureRepository.save(any(Feature.class))).thenReturn(newFeature);
+        when(roleRepository.findByName("ADMIN")).thenReturn(Optional.of(adminRole));
+        when(roleRepository.findByName("USER")).thenReturn(Optional.of(userRole));
+        when(featureFlagRepository.findByFeatureKeyAndRoleId("TEST_FEATURE", 1L)).thenReturn(Optional.empty());
+        when(featureFlagRepository.findByFeatureKeyAndRoleId("TEST_FEATURE", 2L)).thenReturn(Optional.empty());
+        when(featureFlagRepository.save(any(FeatureFlag.class))).thenReturn(userFlag);
+
+        // Act
+        FeatureFlagDTO result = featureFlagService.createFeatureFlag("TEST_FEATURE", "Test Feature", "Test description", true, false);
+
+        // Assert
+        assertNotNull(result);
+        verify(featureRepository).save(any(Feature.class));
+        verify(featureFlagRepository, times(2)).save(any(FeatureFlag.class));
+    }
+
+    @Test
+    @DisplayName("createFeatureFlag with featureKey should update existing feature flags")
+    void createFeatureFlag_WithFeatureKey_ShouldUpdateExistingFlags() {
+        // Arrange
+        Role adminRole = new Role("ADMIN", "Administrator");
+        adminRole.setId(1L);
+        Role userRole = new Role("USER", "Regular user");
+        userRole.setId(2L);
+        FeatureFlag existingAdminFlag = new FeatureFlag(testFeature, adminRole, false);
+        existingAdminFlag.setId(30L);
+        FeatureFlag existingUserFlag = new FeatureFlag(testFeature, userRole, false);
+        existingUserFlag.setId(31L);
+
+        when(featureRepository.findByFeatureKey("DASHBOARD")).thenReturn(Optional.of(testFeature));
+        when(roleRepository.findByName("ADMIN")).thenReturn(Optional.of(adminRole));
+        when(roleRepository.findByName("USER")).thenReturn(Optional.of(userRole));
+        when(featureFlagRepository.findByFeatureKeyAndRoleId("DASHBOARD", 1L)).thenReturn(Optional.of(existingAdminFlag));
+        when(featureFlagRepository.findByFeatureKeyAndRoleId("DASHBOARD", 2L)).thenReturn(Optional.of(existingUserFlag));
+        when(featureFlagRepository.save(any(FeatureFlag.class))).thenReturn(existingUserFlag);
+
+        // Act
+        FeatureFlagDTO result = featureFlagService.createFeatureFlag("DASHBOARD", "Dashboard", "Dashboard access", true, true);
+
+        // Assert
+        assertNotNull(result);
+        assertTrue(existingAdminFlag.isEnabled());
+        assertTrue(existingUserFlag.isEnabled());
+        verify(featureRepository, never()).save(any(Feature.class));
+        verify(featureFlagRepository, times(2)).save(any(FeatureFlag.class));
+    }
+
+    @Test
+    @DisplayName("createFeatureFlag with featureKey should throw when role not found")
+    void createFeatureFlag_WithFeatureKey_ShouldThrowWhenRoleNotFound() {
+        // Arrange
+        when(featureRepository.findByFeatureKey("TEST_FEATURE")).thenReturn(Optional.empty());
+        when(featureRepository.save(any(Feature.class))).thenReturn(testFeature);
+        when(roleRepository.findByName("ADMIN")).thenReturn(Optional.empty());
+
+        // Act & Assert
+        assertThrows(ResourceNotFoundException.class, () -> {
+            featureFlagService.createFeatureFlag("TEST_FEATURE", "Test", "Test", true, true);
+        });
     }
 
     @Test

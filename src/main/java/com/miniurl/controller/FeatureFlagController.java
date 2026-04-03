@@ -128,7 +128,7 @@ public class FeatureFlagController {
     @PostMapping
     @Operation(
         summary = "Create feature flag",
-        description = "Create a new feature flag for a specific role. ADMIN only endpoint."
+        description = "Create a new feature with role-based flags for ADMIN and USER roles. ADMIN only endpoint."
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Feature flag created successfully",
@@ -139,20 +139,22 @@ public class FeatureFlagController {
     })
     public ResponseEntity<ApiResponse> createFeatureFlag(
             @Parameter(description = "Create feature flag request", required = true,
-                schema = @Schema(example = "{\"featureId\": 1, \"roleId\": 2, \"enabled\": true}"))
+                schema = @Schema(example = "{\"featureKey\":\"FEATURE_KEY\",\"featureName\":\"Feature Name\",\"description\":\"Feature Description\",\"adminEnabled\":true,\"userEnabled\":true}"))
             @RequestBody Map<String, Object> request,
             HttpServletRequest httpRequest) {
         try {
-            Long featureId = ((Number) request.get("featureId")).longValue();
-            Long roleId = ((Number) request.get("roleId")).longValue();
-            Boolean enabled = (Boolean) request.get("enabled");
-            
-            if (featureId == null || roleId == null || enabled == null) {
+            String featureKey = (String) request.get("featureKey");
+            String featureName = (String) request.get("featureName");
+            String description = (String) request.get("description");
+            Boolean adminEnabled = (Boolean) request.get("adminEnabled");
+            Boolean userEnabled = (Boolean) request.get("userEnabled");
+
+            if (featureKey == null || featureName == null || adminEnabled == null || userEnabled == null) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("Missing required fields: featureId, roleId, enabled"));
+                        .body(ApiResponse.error("Missing required fields: featureKey, featureName, description, adminEnabled, userEnabled"));
             }
 
-            FeatureFlagDTO created = featureFlagService.createFeatureFlag(featureId, roleId, enabled);
+            FeatureFlagDTO created = featureFlagService.createFeatureFlag(featureKey, featureName, description, adminEnabled, userEnabled);
 
             return ResponseEntity.ok(ApiResponse.success(
                     "Feature flag created for '" + created.getFeatureName() + "' (role: " + created.getRoleName() + ")",
@@ -293,19 +295,21 @@ public class FeatureFlagController {
     })
     public ResponseEntity<ApiResponse> createGlobalFlag(
             @Parameter(description = "Create global flag request", required = true,
-                schema = @Schema(example = "{\"featureId\": 1, \"enabled\": true}"))
+                schema = @Schema(example = "{\"featureKey\":\"FEATURE_KEY\",\"featureName\":\"Feature Name\",\"description\":\"Feature Description\",\"enabled\":true}"))
             @RequestBody Map<String, Object> request,
             HttpServletRequest httpRequest) {
         try {
-            Long featureId = ((Number) request.get("featureId")).longValue();
+            String featureKey = (String) request.get("featureKey");
+            String featureName = (String) request.get("featureName");
+            String description = (String) request.get("description");
             Boolean enabled = (Boolean) request.get("enabled");
-            
-            if (featureId == null || enabled == null) {
+
+            if (featureKey == null || featureName == null || enabled == null) {
                 return ResponseEntity.badRequest()
-                        .body(ApiResponse.error("Missing required fields: featureId, enabled"));
+                        .body(ApiResponse.error("Missing required fields: featureKey, featureName, enabled"));
             }
 
-            GlobalFlagDTO created = globalFlagService.createGlobalFlag(featureId, enabled);
+            GlobalFlagDTO created = globalFlagService.createGlobalFlag(featureKey, featureName, description, enabled);
 
             return ResponseEntity.ok(ApiResponse.success(
                     "Global flag created for '" + created.getFeatureName() + "'",

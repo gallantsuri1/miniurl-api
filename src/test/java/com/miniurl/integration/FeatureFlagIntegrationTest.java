@@ -68,9 +68,9 @@ class FeatureFlagIntegrationTest {
     @DisplayName("GET /api/features/global should return global flags without authentication")
     void getGlobalFlags_NoAuthRequired() throws Exception {
         // Arrange - Create a global flag
-        Feature feature = new Feature("USER_SIGNUP", "User Sign Up", "Allow new user registration");
+        Feature feature = new Feature("GLOBAL_USER_SIGNUP", "User Sign Up", "Allow new user registration");
         feature = featureRepository.save(feature);
-        
+
         GlobalFlag globalFlag = new GlobalFlag(feature, true);
         globalFlagRepository.save(globalFlag);
 
@@ -82,12 +82,12 @@ class FeatureFlagIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/self-invite/send should work without authentication when USER_SIGNUP enabled")
+    @DisplayName("POST /api/self-invite/send should work without authentication when GLOBAL_USER_SIGNUP enabled")
     void selfInvite_NoAuth_WhenEnabled() throws Exception {
-        // Arrange - Create USER_SIGNUP global flag
-        Feature feature = new Feature("USER_SIGNUP", "User Sign Up", "Allow new user registration");
+        // Arrange - Create GLOBAL_USER_SIGNUP global flag
+        Feature feature = new Feature("GLOBAL_USER_SIGNUP", "User Sign Up", "Allow new user registration");
         feature = featureRepository.save(feature);
-        
+
         GlobalFlag globalFlag = new GlobalFlag(feature, true);
         globalFlagRepository.save(globalFlag);
 
@@ -102,12 +102,12 @@ class FeatureFlagIntegrationTest {
     }
 
     @Test
-    @DisplayName("POST /api/self-invite/send should fail when USER_SIGNUP disabled")
+    @DisplayName("POST /api/self-invite/send should fail when GLOBAL_USER_SIGNUP disabled")
     void selfInvite_ShouldFail_WhenDisabled() throws Exception {
-        // Arrange - Create disabled USER_SIGNUP flag
-        Feature feature = new Feature("USER_SIGNUP", "User Sign Up", "Allow new user registration");
+        // Arrange - Create disabled GLOBAL_USER_SIGNUP flag
+        Feature feature = new Feature("GLOBAL_USER_SIGNUP", "User Sign Up", "Allow new user registration");
         feature = featureRepository.save(feature);
-        
+
         GlobalFlag globalFlag = new GlobalFlag(feature, false);
         globalFlagRepository.save(globalFlag);
 
@@ -125,8 +125,8 @@ class FeatureFlagIntegrationTest {
     @Test
     @DisplayName("POST /api/self-invite/send should fail with existing email")
     void selfInvite_ShouldFail_WithEmailExists() throws Exception {
-        // Arrange - Create USER_SIGNUP flag and existing user
-        Feature feature = new Feature("USER_SIGNUP", "User Sign Up", "Allow new user registration");
+        // Arrange - Create GLOBAL_USER_SIGNUP flag and existing user
+        Feature feature = new Feature("GLOBAL_USER_SIGNUP", "User Sign Up", "Allow new user registration");
         feature = featureRepository.save(feature);
         
         GlobalFlag globalFlag = new GlobalFlag(feature, true);

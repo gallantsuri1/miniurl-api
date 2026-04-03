@@ -106,12 +106,36 @@ public class GlobalFlagService {
     public GlobalFlagDTO createGlobalFlag(Long featureId, boolean enabled) {
         Feature feature = featureRepository.findById(featureId)
             .orElseThrow(() -> new ResourceNotFoundException("Feature not found with id: " + featureId));
-        
+
         GlobalFlag globalFlag = new GlobalFlag(feature, enabled);
         globalFlagRepository.save(globalFlag);
-        
+
         logger.info("Created global flag for '{}'", feature.getFeatureKey());
-        
+
+        return new GlobalFlagDTO(globalFlag);
+    }
+
+    /**
+     * Create a new global flag by feature key (creates feature if it doesn't exist).
+     *
+     * @param featureKey the feature key (e.g., "APP_NAME")
+     * @param featureName the display name of the feature
+     * @param description the feature description
+     * @param enabled the enabled state
+     * @return the created or updated global flag DTO
+     */
+    @Transactional
+    public GlobalFlagDTO createGlobalFlag(String featureKey, String featureName, String description, boolean enabled) {
+        Feature feature = featureRepository.findByFeatureKey(featureKey)
+            .orElseGet(() -> featureRepository.save(new Feature(featureKey, featureName, description)));
+
+        GlobalFlag globalFlag = globalFlagRepository.findByFeatureKey(featureKey)
+            .orElse(new GlobalFlag(feature, enabled));
+        globalFlag.setEnabled(enabled);
+        globalFlagRepository.save(globalFlag);
+
+        logger.info("Created/updated global flag for '{}'", feature.getFeatureKey());
+
         return new GlobalFlagDTO(globalFlag);
     }
 
