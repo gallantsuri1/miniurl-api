@@ -1,0 +1,158 @@
+name: Release - Build, Publish & Notify
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+      - master
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKER_USER }}/miniurl-api
+
+jobs:
+  # Only run on tag pushes to main/master
+  build-and-publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify tag is on main/master
+        run: |
+          TAG_COMMIT=$(git rev-list -n 1 ${{ github.ref_name }})
+          MAIN_COMMIT=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master)
+          if [ "$TAG_COMMIT" != "$MAIN_COMMIT" ]; then
+            echo "Error: Tag ${{ github.ref_name }} is not on the latest main/master commit"
+            exit 1
+          fi
+          echo "Tag is on main/master — proceeding."
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_API_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  bump-version:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract current version
+        id: version
+        run: |
+          CURRENT_VERSION=$(grep '<version>' pom.xml | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Calculate next version
+        id: next
+        run: |
+          # Strip -SNAPSHOT if present
+          BASE_VERSION=$(echo "${{ steps.version.outputs.current }}" | sed 's/-SNAPSHOT//')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          NEXT_VERSION="${MAJOR}.$((MINOR + 1)).0-SNAPSHOT"
+          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Update POM version
+        run: |
+          mvn versions:set -DnewVersion=${{ steps.next.outputs.version }} -DgenerateBackupPoms=false
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pom.xml
+          git commit -m "chore: bump version to ${{ steps.next.outputs.version }} [skip ci]"
+          git push origin HEAD:${{ github.ref_name }}
+
+  notify:
+    if: startsWith(github.ref, 'refs/tags/v') && always()
+    needs: [build-and-publish, bump-version]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine release status
+        id: status
+        run: |
+          if [ "${{ needs.build-and-publish.result }}" == "success" ] && [ "${{ needs.bump-version.result }}" == "success" ]; then
+            echo "result=✅ SUCCESS" >> $GITHUB_OUTPUT
+            echo "message=Release ${{ github.ref_name }} built, published to Docker Hub, and version bumped." >> $GITHUB_OUTPUT
+          elif [ "${{ needs.build-and-publish.result }}" == "failure" ]; then
+            echo "result=❌ BUILD FAILED" >> $GITHUB_OUTPUT
+            echo "message=Docker build/publish for ${{ github.ref_name }} failed." >> $GITHUB_OUTPUT
+          else
+            echo "result=⚠️ PARTIAL FAILURE" >> $GITHUB_OUTPUT
+            echo "message=Release ${{ github.ref_name }} partially completed. Check logs." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release (sends native notification to all watchers)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STATUS="${{ steps.status.outputs.result }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TAG="${{ github.ref_name }}"
+
+          if [ "${{ needs.build-and-publish.result }}" == "success" ]; then
+            gh release create "$TAG" \
+              --title "Release $TAG" \
+              --notes "**MiniURL $TAG** — $STATUS
+
+            - Docker image: [${{ secrets.DOCKER_USER }}/miniurl-api:$TAG](https://hub.docker.com/r/${{ secrets.DOCKER_USER }}/miniurl-api/tags)
+            - [View build logs]($RUN_URL)" \
+              --verify-tag \
+              2>/dev/null || echo "Release already exists, skipping creation"
+          else
+            gh release create "$TAG" \
+              --title "Release $TAG — $STATUS" \
+              --notes "**$STATUS**
+
+            Release $TAG did not complete successfully.
+
+            [View build logs]($RUN_URL)" \
+              --prerelease \
+              --verify-tag \
+              2>/dev/null || echo "Release already exists, skipping creation"
+          fi

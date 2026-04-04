@@ -371,23 +371,38 @@ docker run -d --name miniurl-app \
   miniurl-api:local
 ```
 
-### Publish to Docker Hub
+### Trigger a Release
 
-Push a tag to trigger the Docker publish workflow:
+Pushing a version tag triggers the full release workflow: **build → publish Docker image → bump POM version → create GitHub Release (sends notifications)**.
 
 ```bash
+# Ensure you're on main/master
+git checkout main
+git pull origin main
+
+# Tag the release (semantic versioning)
 git tag v1.0.0
+
+# Push tag to trigger release
 git push origin v1.0.0
 ```
 
-This builds and pushes the image to `gallantsuri1/miniurl-api:v1.0.0`.
+**What happens:**
+1. **Docker image** built and pushed to `${DOCKER_USER}/miniurl-api` with tags: `v1.0.0`, `1.0`, `latest`
+2. **POM version** auto-bumped (e.g., `1.0.0` → `1.1.0-SNAPSHOT`) and pushed to `main`
+3. **GitHub Release** created — sends native notifications to all repository watchers
 
-Every push to `main` also publishes the `main` tag.
+**Required secrets** (GitHub → Settings → Secrets and variables → Actions):
+| Secret | Description |
+|--------|-------------|
+| `DOCKER_USER` | Your Docker Hub username |
+| `DOCKER_API_TOKEN` | Docker Hub access token ([generate](https://hub.docker.com/settings/security)) |
 
-**Required secrets:**
-1. Go to GitHub repo → Settings → Secrets and variables → Actions
-2. Add `DOCKERHUB_USERNAME` — your Docker Hub username
-3. Add `DOCKERHUB_TOKEN` — a Docker Hub access token ([generate here](https://hub.docker.com/settings/security))
+**Notes:**
+- Only works on `main`/`master` branches
+- Tag must be on the latest commit of `main`/`master`
+- Failed releases are marked as `--prerelease` for easy identification
+- Workflow logs: `Actions → Release - Build, Publish & Notify`
 
 ---
 
