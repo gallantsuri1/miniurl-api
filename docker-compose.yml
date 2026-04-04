@@ -1,14 +1,17 @@
 version: '3.8'
 
 services:
-  # MiniURL API Application - Uses Docker Hub image
+  # MiniURL API Application
   miniurl-api:
-    image: miniurl/miniurl-api:latest
+    image: ${DOCKER_IMAGE:-gallantsuri1/miniurl-api:v1.0.0}
     container_name: miniurl-api
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8080}:8080"
     environment:
+      # Server Configuration
+      SERVER_PORT: 8080
+
       # Database Configuration - REQUIRED (MySQL runs in its own container)
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
       SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
@@ -27,6 +30,7 @@ services:
 
       # Application Configuration
       APP_BASE_URL: ${APP_BASE_URL:-https://api.example.com}
+      APP_UI_BASE_URL: ${APP_UI_BASE_URL:-https://example.com}
       APP_OTP_EXPIRY_MINUTES: 15
 
       # CORS Configuration - REQUIRED for frontend access
@@ -38,7 +42,7 @@ services:
       # JVM Options
       JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC"
     networks:
-      - miniurl-api-network
+      - miniurl-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health"]
       interval: 30s
@@ -47,5 +51,5 @@ services:
       start_period: 60s
 
 networks:
-  miniurl-api-network:
-    driver: bridge
+  miniurl-network:
+    external: true

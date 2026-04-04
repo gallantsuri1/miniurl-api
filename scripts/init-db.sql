@@ -42,8 +42,9 @@ CREATE TABLE IF NOT EXISTS users (
     otp_verified BOOLEAN DEFAULT FALSE,
     must_change_password BOOLEAN DEFAULT FALSE,
     last_login DATETIME,
-    status VARCHAR(20) DEFAULT 'ACTIVE',
+    status ENUM('ACTIVE','DELETED','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
     failed_login_attempts INT DEFAULT 0,
+    lockout_time DATETIME,
     token_version INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -96,6 +97,41 @@ CREATE TABLE IF NOT EXISTS verification_tokens (
     CONSTRAINT fk_verification_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_token (token),
     INDEX idx_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ===========================================
+-- EMAIL_INVITES TABLE
+-- ===========================================
+CREATE TABLE IF NOT EXISTS email_invites (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    status ENUM('PENDING','ACCEPTED','EXPIRED','REVOKED') NOT NULL DEFAULT 'PENDING',
+    invited_by VARCHAR(100),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    expires_at DATETIME,
+    accepted_at DATETIME,
+    INDEX idx_email (email),
+    INDEX idx_token (token),
+    INDEX idx_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ===========================================
+-- URL_USAGE_LIMITS TABLE (Per-user rate limiting)
+-- ===========================================
+CREATE TABLE IF NOT EXISTS url_usage_limits (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    period_year INT NOT NULL,
+    period_month INT NOT NULL,
+    daily_count INT NOT NULL DEFAULT 0,
+    monthly_count INT NOT NULL DEFAULT 0,
+    last_reset_date DATETIME,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uk_user_period (user_id, period_year, period_month),
+    INDEX idx_user_id (user_id),
+    INDEX idx_period (period_year, period_month),
+    CONSTRAINT fk_usage_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===========================================
@@ -215,7 +251,7 @@ WHERE f.feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME');
 -- Password: admin123# (BCrypt hashed)
 -- IMPORTANT: This will NOT overwrite existing admin user data
 INSERT INTO users (email, first_name, last_name, username, password, role_id, otp_verified, must_change_password, status, failed_login_attempts, token_version)
-SELECT 'admin@example.com', 'Admin', 'User', 'admin', 
+SELECT 'surihomelab@gmail.com', 'Admin', 'User', 'admin', 
        '$2a$10$nzHq.6hGIESrTqRPeZ.bKuQFLWd436VUEpzmoZxI.UnSrril3KTXi', 
        1, true, true, 'ACTIVE', 0, 0
 FROM DUAL

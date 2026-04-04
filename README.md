@@ -64,7 +64,8 @@ cp .env.example .env
 echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
 
 # 4. Configure CORS and base URL (REQUIRED for UI access)
-export APP_BASE_URL=http://localhost:3000
+export APP_BASE_URL=http://localhost:8080
+export APP_UI_BASE_URL=http://localhost:3000
 export APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
 
 # 5. Build and run
@@ -83,6 +84,7 @@ cd miniurl
 cp .env.example .env
 echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
 echo "APP_BASE_URL=http://localhost:8080" >> .env
+echo "APP_UI_BASE_URL=http://localhost:3000" >> .env
 echo "APP_CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080" >> .env
 
 # Ensure MySQL is running locally and database is initialized:
@@ -225,20 +227,46 @@ MySQL runs in its own container — the `docker-compose.yml` only manages the AP
 - MySQL instance accessible from the Docker network
 - Database initialized with `scripts/init-db.sql` (manual step)
 
-### Using Docker Compose
+### Initialize Database
+
+Run the init script against your MySQL container:
 
 ```bash
-# 1. Configure environment
+# Method 1: Interactive (prompts for password — recommended)
+docker exec -i mysql_db_miniurl mysql -u root -p miniurldb < scripts/init-db.sql
+
+# Method 2: Direct (quote password if it contains special characters like !@#$)
+docker exec -i mysql_db_miniurl mysql -u root -p'<password>' miniurldb < scripts/init-db.sql
+```
+
+**Verify initialization:**
+
+```bash
+docker exec -i mysql_db_miniurl mysql -u root -p'<password>' miniurldb -e "
+  SELECT COUNT(*) AS roles FROM roles;
+  SELECT COUNT(*) AS features FROM features;
+  SELECT COUNT(*) AS global_flags FROM global_flags;
+"
+```
+
+### Using Docker Compose
+
+MySQL and the API run as separate compose stacks on the same host.
+
+```bash
+# 1. Start MySQL
+docker compose -f docker-compose-mysql.yml up -d
+
+# 2. Initialize database (run once)
+docker exec -i mysql_db_miniurl mysql -u root -p miniurldb < scripts/init-db.sql
+
+# 3. Configure environment
 cp .env.example .env
+# Edit .env: set SPRING_DATASOURCE_URL to jdbc:mysql://mysql_db_miniurl:3306/miniurldb...
+# Set SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, APP_JWT_SECRET
 
-# Edit .env with your values
-# Required: SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD, APP_JWT_SECRET
-echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
-
-# 2. Initialize database (run once, outside Docker)
-mysql -h <mysql-host> -u <user> -p < scripts/init-db.sql
-
-# 3. Start the API
+# 4. Start the API
+docker compose pull
 docker compose up -d
 
 # View logs
@@ -246,12 +274,23 @@ docker compose logs -f miniurl-api
 
 # Stop
 docker compose down
+docker compose -f docker-compose-mysql.yml down
 ```
 
-### Using Published Docker Hub Image
+### Production Deployment (Docker Hub Image)
+
+Images are published to `gallantsuri1/miniurl-api`:
+
+| Tag | Description |
+|-----|-------------|
+| `main` | Latest from main branch |
+| `v1.0.0` | Specific release version |
+| `sha-<hash>` | Specific commit SHA |
+
+**Pull and deploy:**
 
 ```bash
-docker pull miniurl/miniurl-api:latest
+docker pull gallantsuri1/miniurl-api:v1.0.0
 
 docker run -d --name miniurl \
   -e SPRING_DATASOURCE_URL="jdbc:mysql://<mysql-host>:3306/miniurldb?useSSL=false&serverTimezone=UTC" \
@@ -259,8 +298,30 @@ docker run -d --name miniurl \
   -e SPRING_DATASOURCE_PASSWORD="<db-password>" \
   -e APP_JWT_SECRET="your-secure-jwt-secret-min-32-chars" \
   -e SPRING_PROFILES_ACTIVE=prod \
+  -e APP_BASE_URL="https://api.example.com" \
+  -e APP_UI_BASE_URL="https://example.com" \
+  -e APP_CORS_ALLOWED_ORIGINS="https://example.com" \
   -p 8080:8080 \
-  miniurl/miniurl-api:latest
+  gallantsuri1/miniurl-api:v1.0.0
+```
+
+**Build and push your own image:**
+
+```bash
+# Build
+docker build -t gallantsuri1/miniurl-api:v1.0.0 .
+
+# Push to Docker Hub
+docker push gallantsuri1/miniurl-api:v1.0.0
+```
+
+### Custom Image Reference
+
+Use a different image/tag by setting `DOCKER_IMAGE` in `.env`:
+
+```bash
+# .env
+DOCKER_IMAGE=gallantsuri1/miniurl-api:v1.0.0
 ```
 
 ### Build Locally
@@ -273,10 +334,30 @@ docker run -d --name miniurl-app \
   -e SPRING_DATASOURCE_USERNAME="<db-user>" \
   -e SPRING_DATASOURCE_PASSWORD="<db-password>" \
   -e APP_JWT_SECRET="your-secure-jwt-secret" \
+  -e APP_BASE_URL="http://localhost:8080" \
+  -e APP_UI_BASE_URL="http://localhost:3000" \
   -e SPRING_PROFILES_ACTIVE=dev \
   -p 8080:8080 \
   miniurl-api:local
 ```
+
+### Publish to Docker Hub
+
+Push a tag to trigger the Docker publish workflow:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This builds and pushes the image to `gallantsuri1/miniurl-api:v1.0.0`.
+
+Every push to `main` also publishes the `main` tag.
+
+**Required secrets:**
+1. Go to GitHub repo → Settings → Secrets and variables → Actions
+2. Add `DOCKERHUB_USERNAME` — your Docker Hub username
+3. Add `DOCKERHUB_TOKEN` — a Docker Hub access token ([generate here](https://hub.docker.com/settings/security))
 
 ---
 
@@ -889,6 +970,25 @@ curl -X GET 'http://localhost:8080/api/admin/email-invites?search=john' \
 
 **⚠️ SECURITY:** Change admin password immediately after first login!
 
+### Reset Admin Password
+
+Use the provided script to generate a BCrypt hash and update the database:
+
+```bash
+# Install dependency (one-time)
+pip3 install bcrypt
+
+# Reset password (interactive)
+./scripts/reset-admin-password.sh
+
+# Or pass password directly
+./scripts/reset-admin-password.sh "MyNewSecure@Pass123"
+```
+
+**Requirements:**
+- Docker MySQL container (`mysql_db_miniurl`)
+- Python3 with `bcrypt` module
+
 ### User Roles
 
 | Role | Permissions |
@@ -993,6 +1093,8 @@ Request → Rate Limit → CORS Validation → JWT Filter → Circuit Breaker �
 
 ```
 miniurl/
+├── docker-compose.yml           # API container only
+├── docker-compose-mysql.yml     # MySQL container (separate stack)
 ├── scripts/
 │   ├── init-db.sql              # Database initialization (single source of truth)
 │   └── init-db.sh               # Database setup script
@@ -1098,19 +1200,26 @@ open target/site/jacoco/index.html
 
 **Workflows:**
 1. **CI Pipeline** (`ci.yml`) - Build, test, health check on PRs
-2. **Docker Publish** (`docker-publish.yml`) - Build on release tags (main/master only)
+2. **Docker Publish** (`docker-publish.yml`) - Build and push image on push to `main` or release tags
 3. **Version Bump** (`version-bump.yml`) - Auto minor version bump on PR merge
 
 ### Docker Publishing
 
-- **Only on release tags** (e.g., `v1.1.0`) for main/master
-- **No builds for feature branches**
-- Pre-release tags get `dev` suffix
-- Stable releases tagged as `latest`
+- **Push to `main`** — publishes `gallantsuri1/miniurl-api:v1.0.0`
+- **Release tag** (e.g., `v1.0.0`) — publishes versioned tags: `v1.0.0`, `1.0`, `sha-<hash>`
 
-**Configure Docker Hub:**
-1. Add secrets to GitHub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`
-2. Push a release tag: `git tag v1.1.0 && git push origin v1.1.0`
+**Trigger a release:**
+```bash
+git tag v1.0.0 && git push origin v1.0.0
+```
+
+**Required secrets** (GitHub repo → Settings → Secrets → Actions):
+- `DOCKERHUB_USERNAME` — your Docker Hub username
+- `DOCKERHUB_TOKEN` — a Docker Hub access token
+
+**Manage images:**
+- View: [Docker Hub](https://hub.docker.com/r/gallantsuri1/miniurl-api)
+- Use: Set `DOCKER_IMAGE` in `.env` to pick a specific tag
 
 ---
 
@@ -1696,6 +1805,42 @@ const response = await fetch('https://api.example.com/api/auth/login', {
 | `/api/features/global` | GET | Get global flags (public) |
 | `/api/admin/features` | GET | Get all features (ADMIN) |
 | `/api/self-invite/send` | POST | Send self-invite |
+
+### Limit MySQL Volume Size
+
+Docker doesn't natively limit volume size. Here are the recommended approaches:
+
+**Option 1: File-backed ext4 filesystem (hard limit)**
+
+```bash
+# Create a 100GB sparse file
+truncate -s 100G /opt/mysql-data.img
+
+# Format as ext4
+mkfs.ext4 /opt/mysql-data.img
+
+# Mount it to the Docker volume directory
+mkdir -p /var/lib/docker/volumes/miniurl-api_mysql-data/_data
+mount -o loop /opt/mysql-data.img /var/lib/docker/volumes/miniurl-api_mysql-data/_data
+
+# Make persistent (add to /etc/fstab)
+echo '/opt/mysql-data.img /var/lib/docker/volumes/miniurl-api_mysql-data/_data ext4 loop 0 0' >> /etc/fstab
+```
+
+**Option 2: MySQL-level limits (via `docker-compose-mysql.yml`)**
+
+```yaml
+services:
+  mysql:
+    command: >
+      --max-binlog-size=524288000
+      --binlog-expire-logs-seconds=604800
+      --innodb-data-file-path=ibdata1:12M:autoextend:max:80G
+      --innodb-log-file-size=256M
+      --innodb-buffer-pool-size=1G
+```
+
+This caps: InnoDB data to 80GB, binlog retention to 7 days, buffer pool to 1GB.
 
 ### Backup and Restore
 

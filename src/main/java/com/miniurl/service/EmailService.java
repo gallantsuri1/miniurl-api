@@ -28,8 +28,8 @@ public class EmailService {
     @Value("${spring.mail.username:}")
     private String mailUsername;
 
-    @Value("${app.base-url}")
-    private String baseUrl;
+    @Value("${app.ui-base-url:http://localhost:3000}")
+    private String uiBaseUrl;
 
     @Value("${app.name:MiniURL}")
     private String appName;
@@ -146,7 +146,7 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject(resolveAppName() + " - Verify Your Email");
 
-            String verificationLink = baseUrl + "/activate?token=" + token;
+            String verificationLink = uiBaseUrl + "/activate?token=" + token;
             Context context = createBaseContext();
             context.setVariable("username", username);
             context.setVariable("verificationLink", verificationLink);
@@ -166,7 +166,7 @@ public class EmailService {
                 helper.setSubject(resolveAppName() + " - Verify Your Email");
                 Context context = createBaseContext();
                 context.setVariable("username", username);
-                context.setVariable("verificationLink", baseUrl + "/activate?token=" + token);
+                context.setVariable("verificationLink", uiBaseUrl + "/activate?token=" + token);
                 helper.setText(templateEngine.process("email/email-verification", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {
@@ -204,7 +204,7 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject(resolveAppName() + " - Password Reset Request");
 
-            String resetLink = baseUrl + "/reset-password?token=" + token;
+            String resetLink = uiBaseUrl + "/reset-password?token=" + token;
             Context context = createBaseContext();
             context.setVariable("username", username);
             context.setVariable("resetLink", resetLink);
@@ -224,7 +224,7 @@ public class EmailService {
                 helper.setSubject(resolveAppName() + " - Password Reset Request");
                 Context context = createBaseContext();
                 context.setVariable("username", username);
-                context.setVariable("resetLink", baseUrl + "/reset-password?token=" + token);
+                context.setVariable("resetLink", uiBaseUrl + "/reset-password?token=" + token);
                 helper.setText(templateEngine.process("email/password-reset", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {
@@ -263,7 +263,7 @@ public class EmailService {
 
             Context context = createBaseContext();
             context.setVariable("username", username);
-            context.setVariable("dashboardLink", baseUrl + "/dashboard");
+            context.setVariable("dashboardLink", uiBaseUrl + "/dashboard");
             helper.setText(templateEngine.process("email/welcome-email", context), true);
 
             mailSender.send(message);
@@ -280,7 +280,7 @@ public class EmailService {
                 helper.setSubject("Welcome to " + resolveAppName() + "!");
                 Context context = createBaseContext();
                 context.setVariable("username", username);
-                context.setVariable("dashboardLink", baseUrl + "/dashboard");
+                context.setVariable("dashboardLink", uiBaseUrl + "/dashboard");
                 helper.setText(templateEngine.process("email/welcome-email", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {
@@ -319,7 +319,7 @@ public class EmailService {
 
             Context context = createBaseContext();
             context.setVariable("username", username);
-            context.setVariable("dashboardLink", baseUrl + "/dashboard");
+            context.setVariable("dashboardLink", uiBaseUrl + "/dashboard");
             helper.setText(templateEngine.process("email/welcome-back-email", context), true);
 
             mailSender.send(message);
@@ -336,7 +336,7 @@ public class EmailService {
                 helper.setSubject("Welcome Back to " + resolveAppName() + "!");
                 Context context = createBaseContext();
                 context.setVariable("username", username);
-                context.setVariable("dashboardLink", baseUrl + "/dashboard");
+                context.setVariable("dashboardLink", uiBaseUrl + "/dashboard");
                 helper.setText(templateEngine.process("email/welcome-back-email", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {
@@ -429,7 +429,7 @@ public class EmailService {
 
             Context context = createBaseContext();
             context.setVariable("username", username);
-            context.setVariable("forgotPasswordLink", baseUrl + "/forgot-password");
+            context.setVariable("forgotPasswordLink", uiBaseUrl + "/forgot-password");
             helper.setText(templateEngine.process("email/password-reset-confirmation", context), true);
 
             mailSender.send(message);
@@ -446,7 +446,7 @@ public class EmailService {
                 helper.setSubject(resolveAppName() + " - Password Reset Successful");
                 Context context = createBaseContext();
                 context.setVariable("username", username);
-                context.setVariable("forgotPasswordLink", baseUrl + "/forgot-password");
+                context.setVariable("forgotPasswordLink", uiBaseUrl + "/forgot-password");
                 helper.setText(templateEngine.process("email/password-reset-confirmation", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {
@@ -486,7 +486,7 @@ public class EmailService {
 
             Context context = createBaseContext();
             context.setVariable("username", username);
-            context.setVariable("settingsLink", baseUrl + "/settings");
+            context.setVariable("settingsLink", uiBaseUrl + "/settings");
             helper.setText(templateEngine.process("email/password-change-notification", context), true);
 
             mailSender.send(message);
@@ -503,7 +503,7 @@ public class EmailService {
                 helper.setSubject(resolveAppName() + " - Password Changed Successfully");
                 Context context = createBaseContext();
                 context.setVariable("username", username);
-                context.setVariable("settingsLink", baseUrl + "/settings");
+                context.setVariable("settingsLink", uiBaseUrl + "/settings");
                 helper.setText(templateEngine.process("email/password-change-notification", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {
@@ -538,7 +538,7 @@ public class EmailService {
             helper.setTo(toEmail);
             helper.setSubject(resolveAppName() + " - You're Invited!");
 
-            String inviteLink = baseUrl + "/signup?invite=" + token;
+            String inviteLink = uiBaseUrl + "/signup?invite=" + token;
             Context context = createBaseContext();
             context.setVariable("inviteLink", inviteLink);
             helper.setText(templateEngine.process("email/invite-email", context), true);
@@ -554,7 +554,7 @@ public class EmailService {
      * Fallback method for sendInviteEmail (not used since we removed circuit breaker)
      */
     @SuppressWarnings("unused")
-    public void sendInviteFallback(String toEmail, String token, String baseUrl, Throwable t) {
+    public void sendInviteFallback(String toEmail, String token, String uiBaseUrl, Throwable t) {
         logger.error("Email service unavailable for invite email. Logging to console. Error: {}",
             t != null ? t.getMessage() : "Circuit breaker open");
         logger.info("Invite email for {}: would have been sent", toEmail);
@@ -582,7 +582,7 @@ public class EmailService {
 
             Context context = createBaseContext();
             context.setVariable("firstName", firstName);
-            context.setVariable("loginLink", baseUrl + "/login");
+            context.setVariable("loginLink", uiBaseUrl + "/login");
             helper.setText(templateEngine.process("email/registration-congratulations", context), true);
 
             mailSender.send(message);
@@ -599,7 +599,7 @@ public class EmailService {
                 helper.setSubject("Welcome to " + resolveAppName() + "!");
                 Context context = createBaseContext();
                 context.setVariable("firstName", firstName);
-                context.setVariable("loginLink", baseUrl + "/login");
+                context.setVariable("loginLink", uiBaseUrl + "/login");
                 helper.setText(templateEngine.process("email/registration-congratulations", context), true);
                 mailSender.send(message);
             } catch (Exception ex) {

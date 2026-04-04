@@ -14,6 +14,9 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
+# Create logs directory
+RUN mkdir -p /app/logs
+
 # Create non-root user for security
 RUN groupadd -g 1001 appgroup && \
     useradd -u 1001 -G appgroup -m appuser
@@ -22,7 +25,7 @@ RUN groupadd -g 1001 appgroup && \
 COPY --from=build /app/target/*.jar app.jar
 
 # Set ownership
-RUN chown appuser:appgroup app.jar
+RUN chown -R appuser:appgroup /app
 
 # Switch to non-root user
 USER appuser
