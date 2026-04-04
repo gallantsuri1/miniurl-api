@@ -373,7 +373,7 @@ docker run -d --name miniurl-app \
 
 ### Trigger a Release
 
-Pushing a version tag triggers the full release workflow: **build → publish Docker image → bump POM version → create GitHub Release (sends notifications)**.
+Pushing a version tag triggers the CI workflow: **build → publish Docker image → notify via GitHub Issue**.
 
 ```bash
 # Ensure you're on main/master
@@ -388,9 +388,12 @@ git push origin v1.0.0
 ```
 
 **What happens:**
-1. **Docker image** built and pushed to `${DOCKER_USER}/miniurl-api` with tags: `v1.0.0`, `1.0`, `latest`
-2. **POM version** auto-bumped (e.g., `1.0.0` → `1.1.0-SNAPSHOT`) and pushed to `main`
-3. **GitHub Release** created — sends native notifications to all repository watchers
+1. **Docker image** built and pushed to Docker Hub with tags: `v1.0.0`, `latest`
+2. **GitHub Issue** created and assigned to you — GitHub sends you an email notification with build details
+
+**Manual trigger** (re-run or build a specific tag):
+- Go to **Actions → Build and Publish Docker Image → Run workflow**
+- Enter the tag (e.g., `v1.0.0`) and click **Run workflow**
 
 **Required secrets** (GitHub → Settings → Secrets and variables → Actions):
 | Secret | Description |
@@ -401,8 +404,8 @@ git push origin v1.0.0
 **Notes:**
 - Only works on `main`/`master` branches
 - Tag must be on the latest commit of `main`/`master`
-- Failed releases are marked as `--prerelease` for easy identification
-- Workflow logs: `Actions → Release - Build, Publish & Notify`
+- On failure, a GitHub Issue is created with the build error and link to logs
+- Workflow logs: `Actions → Build and Publish Docker Image`
 
 ---
 

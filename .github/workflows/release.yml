@@ -1,38 +1,48 @@
-name: Release - Build, Publish & Notify
+name: Build and Publish Docker Image
 
 on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
-      - master
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build (e.g., v1.0.0)'
+        required: true
+        type: string
 
-env:
-  IMAGE_NAME: ${{ secrets.DOCKER_USER }}/miniurl-api
+permissions:
+  contents: read
+  packages: write
+  issues: write
 
 jobs:
-  # Only run on tag pushes to main/master
   build-and-publish:
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify tag is on main/master
+      - name: Extract tag name
+        id: tag
         run: |
-          TAG_COMMIT=$(git rev-list -n 1 ${{ github.ref_name }})
-          MAIN_COMMIT=$(git rev-parse origin/main 2>/dev/null || git rev-parse origin/master)
-          if [ "$TAG_COMMIT" != "$MAIN_COMMIT" ]; then
-            echo "Error: Tag ${{ github.ref_name }} is not on the latest main/master commit"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG_NAME=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify branch is main or master
+        run: |
+          BRANCH=$(git branch -r --contains ${{ github.ref }} | grep -E 'origin/(main|master)' | head -1 || true)
+          if [ -z "$BRANCH" ]; then
+            echo "❌ Tag is not on main or master branch. Skipping."
             exit 1
           fi
-          echo "Tag is on main/master — proceeding."
+          echo "✅ Tag is on $BRANCH"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -40,119 +50,77 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USER }}
           password: ${{ secrets.DOCKER_API_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
-
-      - name: Build and push Docker image
+      - name: Build and push multi-platform image
         uses: docker/build-push-action@v5
         with:
           context: .
+          platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ secrets.DOCKER_USER }}/miniurl-api:${{ steps.tag.outputs.TAG_NAME }}
+            ${{ secrets.DOCKER_USER }}/miniurl-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  bump-version:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build-and-publish
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Create notification issue
+        if: success()
+        uses: actions/github-script@v7
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const tagName = '${{ steps.tag.outputs.TAG_NAME }}';
+            const imageName = `${{ secrets.DOCKER_USER }}/miniurl-api`;
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
-      - name: Extract current version
-        id: version
-        run: |
-          CURRENT_VERSION=$(grep '<version>' pom.xml | head -1 | sed 's/.*<version>\(.*\)<\/version>.*/\1/')
-          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            const commentBody = `🚀 **Release ${tagName}** has been built and published to Docker Hub!
 
-      - name: Calculate next version
-        id: next
-        run: |
-          # Strip -SNAPSHOT if present
-          BASE_VERSION=$(echo "${{ steps.version.outputs.current }}" | sed 's/-SNAPSHOT//')
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
-          NEXT_VERSION="${MAJOR}.$((MINOR + 1)).0-SNAPSHOT"
-          echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+            **Image:** \`${imageName}:${tagName}\`
 
-      - name: Update POM version
-        run: |
-          mvn versions:set -DnewVersion=${{ steps.next.outputs.version }} -DgenerateBackupPoms=false
+            **Pull it:**
+            \`\`\`bash
+            docker pull ${imageName}:${tagName}
+            \`\`\`
 
-      - name: Commit and push version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pom.xml
-          git commit -m "chore: bump version to ${{ steps.next.outputs.version }} [skip ci]"
-          git push origin HEAD:${{ github.ref_name }}
+            **Run it:**
+            \`\`\`bash
+            docker run -d -p 8080:8080 \\
+              -e SPRING_PROFILES_ACTIVE=prod \\
+              --restart unless-stopped \\
+              ${imageName}:${tagName}
+            \`\`\`
 
-  notify:
-    if: startsWith(github.ref, 'refs/tags/v') && always()
-    needs: [build-and-publish, bump-version]
-    runs-on: ubuntu-latest
+            🔗 [View Build Log](${runUrl})`;
 
-    steps:
-      - name: Determine release status
-        id: status
-        run: |
-          if [ "${{ needs.build-and-publish.result }}" == "success" ] && [ "${{ needs.bump-version.result }}" == "success" ]; then
-            echo "result=✅ SUCCESS" >> $GITHUB_OUTPUT
-            echo "message=Release ${{ github.ref_name }} built, published to Docker Hub, and version bumped." >> $GITHUB_OUTPUT
-          elif [ "${{ needs.build-and-publish.result }}" == "failure" ]; then
-            echo "result=❌ BUILD FAILED" >> $GITHUB_OUTPUT
-            echo "message=Docker build/publish for ${{ github.ref_name }} failed." >> $GITHUB_OUTPUT
-          else
-            echo "result=⚠️ PARTIAL FAILURE" >> $GITHUB_OUTPUT
-            echo "message=Release ${{ github.ref_name }} partially completed. Check logs." >> $GITHUB_OUTPUT
-          fi
+            const actor = context.actor;
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🐳 Docker image published: ${tagName}`,
+              body: commentBody,
+              labels: ['release', 'docker'],
+              assignees: [actor]
+            });
 
-      - name: Create GitHub Release (sends native notification to all watchers)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          STATUS="${{ steps.status.outputs.result }}"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TAG="${{ github.ref_name }}"
+            console.log(`Created issue #${issue.data.number} and assigned to @${actor} — GitHub will email them`);
 
-          if [ "${{ needs.build-and-publish.result }}" == "success" ]; then
-            gh release create "$TAG" \
-              --title "Release $TAG" \
-              --notes "**MiniURL $TAG** — $STATUS
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tagName = '${{ steps.tag.outputs.TAG_NAME }}';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
-            - Docker image: [${{ secrets.DOCKER_USER }}/miniurl-api:$TAG](https://hub.docker.com/r/${{ secrets.DOCKER_USER }}/miniurl-api/tags)
-            - [View build logs]($RUN_URL)" \
-              --verify-tag \
-              2>/dev/null || echo "Release already exists, skipping creation"
-          else
-            gh release create "$TAG" \
-              --title "Release $TAG — $STATUS" \
-              --notes "**$STATUS**
-
-            Release $TAG did not complete successfully.
-
-            [View build logs]($RUN_URL)" \
-              --prerelease \
-              --verify-tag \
-              2>/dev/null || echo "Release already exists, skipping creation"
-          fi
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `❌ Docker build failed: ${tagName}`,
+              body: `The Docker image build for \`${tagName}\` failed.\n\n🔗 [View Build Log](${runUrl})`,
+              labels: ['release', 'docker', 'failed-build'],
+              assignees: [context.actor]
+            });
