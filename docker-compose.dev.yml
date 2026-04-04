@@ -47,10 +47,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - miniurl-api-network
+      - miniurl-network
 
 networks:
-  miniurl-api-network:
+  miniurl-network:
     driver: bridge
 
 volumes:

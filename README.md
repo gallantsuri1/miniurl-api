@@ -277,6 +277,36 @@ docker compose down
 docker compose -f docker-compose-mysql.yml down
 ```
 
+### Nginx Reverse Proxy (Optional)
+
+Route all traffic through a single port (8080), splitting between API and UI:
+
+```bash
+# Start Nginx proxy
+docker compose -f docker-compose-nginx.yml up -d
+```
+
+**Routing:**
+| Path | Backend | Port |
+|------|---------|------|
+| `/api/*` | MiniURL API | 8090 |
+| `/r/*` | Short URL redirects | 8090 |
+| `/*` | Frontend UI | 3000 |
+
+**Update your `.env`:**
+```bash
+APP_BASE_URL=http://localhost:8080
+APP_UI_BASE_URL=http://localhost:8080
+APP_CORS_ALLOWED_ORIGINS=http://localhost:8080
+```
+
+**Test routing:**
+```bash
+curl http://localhost:8080/api/health   # → API (8090)
+curl http://localhost:8080/r/ABC123     # → API redirect (8090)
+curl http://localhost:8080/             # → UI (3000)
+```
+
 ### Production Deployment (Docker Hub Image)
 
 Images are published to `gallantsuri1/miniurl-api`:
@@ -1095,9 +1125,12 @@ Request → Rate Limit → CORS Validation → JWT Filter → Circuit Breaker �
 miniurl/
 ├── docker-compose.yml           # API container only
 ├── docker-compose-mysql.yml     # MySQL container (separate stack)
+├── docker-compose-nginx.yml     # Nginx reverse proxy (optional)
+├── nginx.conf                   # Nginx routing config
 ├── scripts/
 │   ├── init-db.sql              # Database initialization (single source of truth)
-│   └── init-db.sh               # Database setup script
+│   ├── init-db.sh               # Database setup script
+│   └── reset-admin-password.sh  # Reset admin password
 ├── src/main/java/com/miniurl/
 │   ├── config/                  # Security, JWT, CORS, Rate limiting
 │   ├── controller/              # REST controllers (API only)
