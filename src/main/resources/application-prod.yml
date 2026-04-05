@@ -63,10 +63,13 @@ app:
     expiration-ms: 3600000
   rate-limit:
     # Login: per-IP (high limit for shared NATs/corporate networks)
-    # Per-user brute-force is handled by LockoutPreventionFilter (5 failed attempts → 5 min lockout)
     login:
       requests: ${APP_RATE_LIMIT_LOGIN_REQUESTS:100}
       seconds: ${APP_RATE_LIMIT_LOGIN_SECONDS:900}
+    # Login: per-username (brute-force protection, works even for non-existent users)
+    login-by-username:
+      requests: ${APP_RATE_LIMIT_LOGIN_BY_USERNAME_REQUESTS:5}
+      seconds: ${APP_RATE_LIMIT_LOGIN_BY_USERNAME_SECONDS:300}
     password-reset:
       requests: ${APP_RATE_LIMIT_PASSWORD_RESET_REQUESTS:60}
       seconds: ${APP_RATE_LIMIT_PASSWORD_RESET_SECONDS:3600}

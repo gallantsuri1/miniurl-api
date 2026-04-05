@@ -88,6 +88,9 @@ app:
     login:
       requests: 1000
       seconds: 60
+    login-by-username:
+      requests: 1000
+      seconds: 60
     password-reset:
       requests: 500
       seconds: 60

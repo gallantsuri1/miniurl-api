@@ -163,7 +163,7 @@ docker run -e SPRING_PROFILES_ACTIVE=prod miniurl/miniurl-api:latest
 - **BCrypt Password Hashing** - Secure storage
 - **Account Lockout** - 5-minute lockout after 5 failed attempts
 - **CORS Protection** - Configurable allowed origins via environment variable
-- **Rate Limiting** - IP-based rate limiting for sensitive endpoints
+- **Rate Limiting** - Dual-layer rate limiting (per-IP + per-username) for login endpoints, per-IP for all other sensitive endpoints
 
 ---
 
@@ -1113,15 +1113,33 @@ pip3 install bcrypt
 
 ### Rate Limiting (Bucket4j + Caffeine)
 
-| Endpoint | Limit | Window | Purpose |
-|----------|-------|--------|---------|
-| Login | 5 | 15 min | Brute force protection |
-| Password Reset | 20 | 1 hour | Email bombing prevention |
-| OTP | 5 | 15 min | OTP abuse prevention |
-| Signup | 5 | 1 hour | Spam prevention |
-| Email Verification | 10 | 1 hour | Token validation abuse prevention |
-| General API | 300 | 1 hour | API abuse prevention |
-| Redirects | 1000 | 1 hour | DDoS protection |
+Login endpoints use **dual-layer** rate limiting (per-IP + per-username) to protect against brute-force attacks while allowing users behind shared NATs/corporate networks to login normally.
+
+| Endpoint | Per-IP Limit | Per-Username Limit | Purpose |
+|----------|-------------|-------------------|---------|
+| Login | 100 req / 15 min | 5 req / 5 min | Brute force protection (works for non-existent users) |
+| Password Reset | 60 req / 1 hr | — | Email bombing prevention |
+| OTP | 30 req / 15 min | — | OTP abuse prevention |
+| Signup | 20 req / 1 hr | — | Spam prevention |
+| Email Verification | 50 req / 1 hr | — | Token validation abuse prevention |
+| URL Creation | 500 req / 1 hr | — | Fair usage |
+| General API | 1000 req / 1 hr | — | API abuse prevention |
+| Redirects | 5000 req / 1 hr | — | DDoS protection |
+
+**How dual-layer login protection works:**
+```
+POST /api/auth/login {"username":"xyz","password":"wrong"}
+  ├─ Per-IP bucket:    100 requests per 15 minutes  (shared NAT friendly)
+  └─ Per-username bucket: 5 requests per 5 minutes  (brute-force protection, works for non-existent users)
+```
+
+**Environment variable overrides (production):**
+```bash
+APP_RATE_LIMIT_LOGIN_REQUESTS=100          # Per-IP login limit
+APP_RATE_LIMIT_LOGIN_SECONDS=900
+APP_RATE_LIMIT_LOGIN_BY_USERNAME_REQUESTS=5  # Per-username login limit
+APP_RATE_LIMIT_LOGIN_BY_USERNAME_SECONDS=300
+```
 
 ### Security Architecture
 
