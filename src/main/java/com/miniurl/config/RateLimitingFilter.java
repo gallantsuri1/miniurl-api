@@ -17,16 +17,16 @@ import java.io.IOException;
 /**
  * Rate limiting filter that applies IP-based rate limiting to all requests.
  *
- * Rate limits by endpoint:
- * - /auth/login, /api/auth/login: 5 requests per 15 minutes
- * - /auth/forgot-password, /api/auth/forgot-password: 20 requests per hour
- * - /auth/verify-otp, /auth/resend-otp, /api/auth/*: 5 requests per 15 minutes
- * - /auth/signup, /api/auth/signup: 5 requests per hour
- * - /api/auth/verify-email: 10 requests per hour (password reset token validation)
- * - /api/auth/verify-email-invite: 10 requests per hour (email invite token validation)
- * - /api/urls (POST): 100 requests per hour
- * - /api/** (general): 300 requests per hour
- * - /r/** (redirects): 1000 requests per hour
+ * Rate limits by endpoint (production defaults):
+ * - /auth/login, /api/auth/login: 100 req/15min per IP (per-user brute-force handled by LockoutPreventionFilter)
+ * - /auth/forgot-password, /api/auth/forgot-password: 60 requests per hour
+ * - /auth/verify-otp, /auth/resend-otp, /api/auth/*: 30 requests per 15 minutes
+ * - /auth/signup, /api/auth/signup: 20 requests per hour
+ * - /api/auth/verify-email: 50 requests per hour (password reset token validation)
+ * - /api/auth/verify-email-invite: 50 requests per hour (email invite token validation)
+ * - /api/urls (POST): 500 requests per hour
+ * - /api/** (general): 1000 requests per hour
+ * - /r/** (redirects): 5000 requests per hour
  */
 @Component
 @Order(1) // Run early in the filter chain
@@ -62,7 +62,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         if (bucket != null && !bucket.tryConsume(1)) {
             // Rate limit exceeded
             logger.warn("Rate limit exceeded for IP: {} on path: {}", clientIp, requestURI);
-            
+
             response.setStatus(429); // HTTP 429 Too Many Requests
             response.setContentType("application/json");
             response.setHeader("X-RateLimit-Limit", "1");

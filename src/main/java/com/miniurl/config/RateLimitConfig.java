@@ -16,15 +16,17 @@ import java.util.concurrent.TimeUnit;
 /**
  * Rate limiting configuration using Bucket4j with Caffeine cache.
  *
- * Provides rate limit buckets for different endpoints:
- * - Login: 5 requests per 15 minutes (brute force protection)
- * - Password Reset: 3 requests per hour (email bombing prevention)
- * - OTP Verification: 5 requests per 15 minutes
- * - Signup: 5 requests per hour (per email bombing prevention)
- * - Email Verification: 10 requests per hour (token validation)
- * - URL Creation: 100 requests per hour
- * - General API: 300 requests per hour
- * - Redirects: 1000 requests per hour
+ * Provides rate limit buckets for different endpoints (production defaults):
+ * - Login (per-IP): 100 requests per 15 minutes (allows shared NATs/corporate networks)
+ *   (per-user brute-force is handled by LockoutPreventionFilter: 5 failed attempts → 5 min lockout)
+ * - Password Reset: 60 requests per hour
+ * - OTP Verification: 30 requests per 15 minutes
+ * - Signup: 20 requests per hour
+ * - Email Verification: 50 requests per hour
+ * - Email Invite Verification: 50 requests per hour
+ * - URL Creation: 500 requests per hour
+ * - General API: 1000 requests per hour
+ * - Redirects: 5000 requests per hour
  */
 @Component
 public class RateLimitConfig {
@@ -41,55 +43,56 @@ public class RateLimitConfig {
     private final Cache<String, Bucket> generalApiBuckets;
     private final Cache<String, Bucket> redirectBuckets;
 
-    @Value("${app.rate-limit.login.requests:5}")
+    // --- Login: per-IP (high limit for shared NATs) ---
+    @Value("${app.rate-limit.login.requests:100}")
     private int loginRequests;
 
     @Value("${app.rate-limit.login.seconds:900}")
     private int loginSeconds;
 
-    @Value("${app.rate-limit.password-reset.requests:20}")
+    @Value("${app.rate-limit.password-reset.requests:60}")
     private int passwordResetRequests;
 
     @Value("${app.rate-limit.password-reset.seconds:3600}")
     private int passwordResetSeconds;
 
-    @Value("${app.rate-limit.otp.requests:5}")
+    @Value("${app.rate-limit.otp.requests:30}")
     private int otpRequests;
 
     @Value("${app.rate-limit.otp.seconds:900}")
     private int otpSeconds;
 
-    @Value("${app.rate-limit.signup.requests:5}")
+    @Value("${app.rate-limit.signup.requests:20}")
     private int signupRequests;
 
     @Value("${app.rate-limit.signup.seconds:3600}")
     private int signupSeconds;
 
-    @Value("${app.rate-limit.email-verification.requests:10}")
+    @Value("${app.rate-limit.email-verification.requests:50}")
     private int emailVerificationRequests;
 
     @Value("${app.rate-limit.email-verification.seconds:3600}")
     private int emailVerificationSeconds;
 
-    @Value("${app.rate-limit.email-invite-verification.requests:10}")
+    @Value("${app.rate-limit.email-invite-verification.requests:50}")
     private int emailInviteVerificationRequests;
 
     @Value("${app.rate-limit.email-invite-verification.seconds:3600}")
     private int emailInviteVerificationSeconds;
 
-    @Value("${app.rate-limit.url-creation.requests:100}")
+    @Value("${app.rate-limit.url-creation.requests:500}")
     private int urlCreationRequests;
 
     @Value("${app.rate-limit.url-creation.seconds:3600}")
     private int urlCreationSeconds;
 
-    @Value("${app.rate-limit.general-api.requests:300}")
+    @Value("${app.rate-limit.general-api.requests:1000}")
     private int generalApiRequests;
 
     @Value("${app.rate-limit.general-api.seconds:3600}")
     private int generalApiSeconds;
 
-    @Value("${app.rate-limit.redirect.requests:1000}")
+    @Value("${app.rate-limit.redirect.requests:5000}")
     private int redirectRequests;
 
     @Value("${app.rate-limit.redirect.seconds:3600}")
@@ -98,12 +101,12 @@ public class RateLimitConfig {
     public RateLimitConfig() {
         // Initialize Caffeine caches with TTL expiration
         // Entries expire after 1 hour of inactivity to prevent memory leaks
-        // Maximum 10,000 entries per cache
+        // Maximum 10,000 entries per cache (100,000 for redirects)
         this.loginBuckets = Caffeine.newBuilder()
             .maximumSize(10_000)
             .expireAfterAccess(1, TimeUnit.HOURS)
             .build();
-        
+
         this.passwordResetBuckets = Caffeine.newBuilder()
             .maximumSize(10_000)
             .expireAfterAccess(1, TimeUnit.HOURS)
@@ -146,7 +149,7 @@ public class RateLimitConfig {
     }
 
     /**
-     * Get login rate limit bucket for IP
+     * Get login rate limit bucket for IP (high limit for shared NATs)
      */
     public Bucket getLoginBucket(String ip) {
         return loginBuckets.get(ip, k -> createLoginBucket(ip));
@@ -209,7 +212,7 @@ public class RateLimitConfig {
     }
 
     /**
-     * Create login bucket with rate limit
+     * Create login bucket with rate limit (per-IP, high limit for shared NATs)
      */
     private Bucket createLoginBucket(String ip) {
         Bandwidth limit = Bandwidth.classic(loginRequests, Refill.greedy(loginRequests, Duration.ofSeconds(loginSeconds)));
@@ -287,8 +290,6 @@ public class RateLimitConfig {
      */
     @Scheduled(fixedRate = 3600000) // Run every hour
     public void cleanup() {
-        // Caffeine automatically expires entries, but we can force cleanup
-        // and log statistics for monitoring
         long totalEntries = loginBuckets.estimatedSize() +
                            passwordResetBuckets.estimatedSize() +
                            otpBuckets.estimatedSize() +
@@ -299,7 +300,6 @@ public class RateLimitConfig {
                            generalApiBuckets.estimatedSize() +
                            redirectBuckets.estimatedSize();
 
-        // Force expiration of stale entries
         loginBuckets.cleanUp();
         passwordResetBuckets.cleanUp();
         otpBuckets.cleanUp();
@@ -309,9 +309,9 @@ public class RateLimitConfig {
         urlCreationBuckets.cleanUp();
         generalApiBuckets.cleanUp();
         redirectBuckets.cleanUp();
-        
+
         if (totalEntries > 1000) {
-            System.out.printf("RateLimitConfig: Cleaned up stale entries. Remaining: %d%n", 
+            System.out.printf("RateLimitConfig: Cleaned up stale entries. Remaining: %d%n",
                 loginBuckets.estimatedSize() + passwordResetBuckets.estimatedSize() +
                 otpBuckets.estimatedSize() + signupBuckets.estimatedSize() +
                 urlCreationBuckets.estimatedSize() + generalApiBuckets.estimatedSize() +
