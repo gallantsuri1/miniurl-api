@@ -19,8 +19,10 @@ import java.util.concurrent.TimeUnit;
  * Provides rate limit buckets for different endpoints (production defaults):
  * - Login (per-IP): 100 requests per 15 minutes (allows shared NATs/corporate networks)
  * - Login (per-username): 5 requests per 5 minutes (brute-force protection, works for non-existent users too)
- * - Password Reset: 60 requests per hour
- * - OTP Verification: 30 requests per 15 minutes
+ * - Password Reset (per-IP): 60 requests per hour
+ * - Password Reset (per-email): 3 requests per hour (prevents targeting specific accounts)
+ * - OTP Verification (per-IP): 30 requests per 15 minutes
+ * - OTP Verification (per-email/username): 5 requests per 5 minutes (brute-force protection)
  * - Signup: 20 requests per hour
  * - Email Verification: 50 requests per hour
  * - Email Invite Verification: 50 requests per hour
@@ -35,8 +37,10 @@ public class RateLimitConfig {
     // Entries automatically expire after period of inactivity
     private final Cache<String, Bucket> loginBuckets;             // per-IP
     private final Cache<String, Bucket> loginByUsernameBuckets;   // per-username
-    private final Cache<String, Bucket> passwordResetBuckets;
-    private final Cache<String, Bucket> otpBuckets;
+    private final Cache<String, Bucket> passwordResetBuckets;     // per-IP
+    private final Cache<String, Bucket> passwordResetByEmailBuckets; // per-email
+    private final Cache<String, Bucket> otpBuckets;               // per-IP
+    private final Cache<String, Bucket> otpByEmailBuckets;        // per-email/username
     private final Cache<String, Bucket> signupBuckets;
     private final Cache<String, Bucket> emailVerificationBuckets;
     private final Cache<String, Bucket> emailInviteVerificationBuckets;
@@ -64,11 +68,25 @@ public class RateLimitConfig {
     @Value("${app.rate-limit.password-reset.seconds:3600}")
     private int passwordResetSeconds;
 
+    // --- Password Reset: per-email (prevents targeting specific accounts) ---
+    @Value("${app.rate-limit.password-reset-by-email.requests:3}")
+    private int passwordResetByEmailRequests;
+
+    @Value("${app.rate-limit.password-reset-by-email.seconds:3600}")
+    private int passwordResetByEmailSeconds;
+
     @Value("${app.rate-limit.otp.requests:30}")
     private int otpRequests;
 
     @Value("${app.rate-limit.otp.seconds:900}")
     private int otpSeconds;
+
+    // --- OTP: per-email/username (brute-force protection) ---
+    @Value("${app.rate-limit.otp-by-email.requests:5}")
+    private int otpByEmailRequests;
+
+    @Value("${app.rate-limit.otp-by-email.seconds:300}")
+    private int otpByEmailSeconds;
 
     @Value("${app.rate-limit.signup.requests:20}")
     private int signupRequests;
@@ -124,10 +142,20 @@ public class RateLimitConfig {
             .maximumSize(10_000)
             .expireAfterAccess(1, TimeUnit.HOURS)
             .build();
-        
+
+        this.passwordResetByEmailBuckets = Caffeine.newBuilder()
+            .maximumSize(100_000)
+            .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
+
         this.otpBuckets = Caffeine.newBuilder()
             .maximumSize(10_000)
             .expireAfterAccess(1, TimeUnit.HOURS)
+            .build();
+
+        this.otpByEmailBuckets = Caffeine.newBuilder()
+            .maximumSize(100_000)
+            .expireAfterAccess(5, TimeUnit.MINUTES)
             .build();
         
         this.signupBuckets = Caffeine.newBuilder()
@@ -183,10 +211,24 @@ public class RateLimitConfig {
     }
 
     /**
+     * Get password reset rate limit bucket for email (prevents targeting specific accounts)
+     */
+    public Bucket getPasswordResetByEmailBucket(String email) {
+        return passwordResetByEmailBuckets.get(email, k -> createPasswordResetByEmailBucket(email));
+    }
+
+    /**
      * Get OTP verification rate limit bucket for IP
      */
     public Bucket getOtpBucket(String ip) {
         return otpBuckets.get(ip, k -> createOtpBucket(ip));
+    }
+
+    /**
+     * Get OTP verification rate limit bucket for email/username (brute-force protection)
+     */
+    public Bucket getOtpByEmailBucket(String emailOrUsername) {
+        return otpByEmailBuckets.get(emailOrUsername, k -> createOtpByEmailBucket(emailOrUsername));
     }
 
     /**
@@ -256,10 +298,26 @@ public class RateLimitConfig {
     }
 
     /**
+     * Create password reset bucket with rate limit (per-email)
+     */
+    private Bucket createPasswordResetByEmailBucket(String email) {
+        Bandwidth limit = Bandwidth.classic(passwordResetByEmailRequests, Refill.greedy(passwordResetByEmailRequests, Duration.ofSeconds(passwordResetByEmailSeconds)));
+        return Bucket4j.builder().addLimit(limit).build();
+    }
+
+    /**
      * Create OTP bucket with rate limit
      */
     private Bucket createOtpBucket(String ip) {
         Bandwidth limit = Bandwidth.classic(otpRequests, Refill.greedy(otpRequests, Duration.ofSeconds(otpSeconds)));
+        return Bucket4j.builder().addLimit(limit).build();
+    }
+
+    /**
+     * Create OTP bucket with rate limit (per-email/username)
+     */
+    private Bucket createOtpByEmailBucket(String emailOrUsername) {
+        Bandwidth limit = Bandwidth.classic(otpByEmailRequests, Refill.greedy(otpByEmailRequests, Duration.ofSeconds(otpByEmailSeconds)));
         return Bucket4j.builder().addLimit(limit).build();
     }
 
@@ -321,7 +379,9 @@ public class RateLimitConfig {
         long totalEntries = loginBuckets.estimatedSize() +
                            loginByUsernameBuckets.estimatedSize() +
                            passwordResetBuckets.estimatedSize() +
+                           passwordResetByEmailBuckets.estimatedSize() +
                            otpBuckets.estimatedSize() +
+                           otpByEmailBuckets.estimatedSize() +
                            signupBuckets.estimatedSize() +
                            emailVerificationBuckets.estimatedSize() +
                            emailInviteVerificationBuckets.estimatedSize() +
@@ -332,7 +392,9 @@ public class RateLimitConfig {
         loginBuckets.cleanUp();
         loginByUsernameBuckets.cleanUp();
         passwordResetBuckets.cleanUp();
+        passwordResetByEmailBuckets.cleanUp();
         otpBuckets.cleanUp();
+        otpByEmailBuckets.cleanUp();
         signupBuckets.cleanUp();
         emailVerificationBuckets.cleanUp();
         emailInviteVerificationBuckets.cleanUp();
@@ -343,7 +405,8 @@ public class RateLimitConfig {
         if (totalEntries > 1000) {
             System.out.printf("RateLimitConfig: Cleaned up stale entries. Remaining: %d%n",
                 loginBuckets.estimatedSize() + loginByUsernameBuckets.estimatedSize() +
-                passwordResetBuckets.estimatedSize() + otpBuckets.estimatedSize() +
+                passwordResetBuckets.estimatedSize() + passwordResetByEmailBuckets.estimatedSize() +
+                otpBuckets.estimatedSize() + otpByEmailBuckets.estimatedSize() +
                 signupBuckets.estimatedSize() + urlCreationBuckets.estimatedSize() +
                 generalApiBuckets.estimatedSize() + redirectBuckets.estimatedSize());
         }

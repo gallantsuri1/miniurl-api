@@ -5,8 +5,10 @@ import com.miniurl.entity.Role;
 import com.miniurl.entity.User;
 import com.miniurl.entity.UserStatus;
 import com.miniurl.entity.VerificationToken;
+import com.miniurl.exception.RateLimitCooldownException;
 import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.exception.UnauthorizedException;
+import com.miniurl.util.ValidationUtils;
 import com.miniurl.repository.RoleRepository;
 import com.miniurl.repository.UserRepository;
 import com.miniurl.repository.VerificationTokenRepository;
@@ -41,6 +43,9 @@ public class AuthService {
     @Value("${app.otp.expiry-minutes:10}")
     private int otpExpiryMinutes;
 
+    @Value("${app.otp.resend-cooldown-seconds:30}")
+    private int otpResendCooldownSeconds;
+
     private final SecureRandom secureRandom = new SecureRandom();
 
     // Email bombing protection - track password reset requests per email
@@ -64,15 +69,27 @@ public class AuthService {
     }
 
     /**
-     * Validate password strength
+     * Validate password strength per NIST SP 800-63B guidelines.
+     * - Min 8 characters
+     * - No complexity requirements (no mandatory special chars, uppercase, etc.)
+     * - Must not be a common/breached password
+     * - Must not contain the username
      */
-    private void validatePasswordStrength(String password) {
+    private void validatePasswordStrength(String password, String username) {
         if (password == null || password.isEmpty()) {
             throw new UnauthorizedException("Password cannot be empty");
         }
 
         if (password.length() < 8) {
             throw new UnauthorizedException("Password must be at least 8 characters long");
+        }
+
+        if (ValidationUtils.isCommonPassword(password)) {
+            throw new UnauthorizedException("Password is too common. Please choose a stronger password.");
+        }
+
+        if (username != null && ValidationUtils.passwordContainsUsername(password, username)) {
+            throw new UnauthorizedException("Password must not contain your username");
         }
     }
 
@@ -103,7 +120,12 @@ public class AuthService {
         }
 
         // Validate password strength
-        validatePasswordStrength(password);
+        validatePasswordStrength(password, username);
+
+        // Check reserved usernames
+        if (ValidationUtils.isReservedUsername(username)) {
+            throw new UnauthorizedException("Username '" + username + "' is reserved. Please choose another.");
+        }
 
         // Check if email already exists
         Optional<User> existingUser = userRepository.findByEmail(email);
@@ -260,7 +282,7 @@ public class AuthService {
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         // Validate new password strength
-        validatePasswordStrength(newPassword);
+        validatePasswordStrength(newPassword, user.getUsername());
 
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setMustChangePassword(false);
@@ -327,7 +349,7 @@ public class AuthService {
         User user = resetToken.getUser();
 
         // Validate new password strength
-        validatePasswordStrength(newPassword);
+        validatePasswordStrength(newPassword, user.getUsername());
 
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setMustChangePassword(false);
@@ -358,7 +380,7 @@ public class AuthService {
         }
 
         // Validate new password strength
-        validatePasswordStrength(newPassword);
+        validatePasswordStrength(newPassword, user.getUsername());
 
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setMustChangePassword(false);
@@ -455,8 +477,143 @@ public class AuthService {
      */
     private void cleanupOldRateLimitEntries() {
         LocalDateTime cutoff = LocalDateTime.now().minusHours(2);
-        
+
         passwordResetRequests.entrySet().removeIf(entry -> entry.getValue().isBefore(cutoff));
         signupRequests.entrySet().removeIf(entry -> entry.getValue().isBefore(cutoff));
+    }
+
+    /**
+     * Send OTP for 2FA login. Reuses existing valid OTP if available, generates new one otherwise.
+     * Enforces 30-second cooldown between OTP sends.
+     * @param user The authenticated user
+     * @throws RateLimitCooldownException if called within 30 seconds of last OTP send
+     */
+    @Transactional
+    public void sendLoginOtp(User user) {
+        // Check cooldown (30 seconds)
+        if (user.getLastOtpSentAt() != null) {
+            LocalDateTime cooldownEnd = user.getLastOtpSentAt().plusSeconds(otpResendCooldownSeconds);
+            if (LocalDateTime.now().isBefore(cooldownEnd)) {
+                throw new RateLimitCooldownException("Please wait 30 seconds before requesting a new OTP.");
+            }
+        }
+
+        boolean hasValidOtp = user.getOtpCode() != null
+                && user.getOtpExpiry() != null
+                && LocalDateTime.now().isBefore(user.getOtpExpiry())
+                && !user.isOtpVerified();
+
+        if (hasValidOtp) {
+            // Resend same OTP
+            user.setLastOtpSentAt(LocalDateTime.now());
+            userRepository.save(user);
+            try {
+                emailService.sendOtpEmail(user.getEmail(), user.getOtpCode(), user.getFirstName());
+                logger.info("Login OTP resent (same code) to: {}", user.getEmail());
+            } catch (Exception e) {
+                logger.warn("Failed to resend login OTP to {}: {}", user.getEmail(), e.getMessage());
+            }
+        } else {
+            // Generate new OTP
+            generateAndSendLoginOtp(user);
+        }
+    }
+
+    /**
+     * Generate and send OTP for 2FA login.
+     * Generates a 6-digit OTP, stores it on the user, and sends it via email.
+     * @param user The authenticated user
+     */
+    @Transactional
+    public void generateAndSendLoginOtp(User user) {
+        String otp = generateOtp();
+        user.setOtpCode(otp);
+        user.setOtpExpiry(LocalDateTime.now().plusMinutes(otpExpiryMinutes));
+        user.setOtpVerified(false);
+        user.setLastOtpSentAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        try {
+            emailService.sendOtpEmail(user.getEmail(), otp, user.getFirstName());
+            logger.info("Login OTP sent to: {}", user.getEmail());
+        } catch (Exception e) {
+            logger.warn("Failed to send login OTP email to {}: {}", user.getEmail(), e.getMessage());
+            logger.warn("OTP for {}: {}", user.getEmail(), otp);
+        }
+    }
+
+    /**
+     * Resend OTP for 2FA login.
+     * Accepts either username or email — whichever was used during login.
+     * Reuses existing OTP if still valid, generates new one if expired.
+     * Enforces 30-second cooldown between consecutive resend requests only.
+     */
+    @Transactional
+    public void resendLoginOtp(String usernameOrEmail) {
+        User user = userRepository.findByUsername(usernameOrEmail)
+            .or(() -> userRepository.findByEmail(usernameOrEmail))
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + usernameOrEmail));
+
+        if (user.getOtpCode() == null || user.getOtpExpiry() == null) {
+            throw new UnauthorizedException("No OTP generated. Please login again.");
+        }
+
+        // Check resend cooldown (30 seconds between consecutive resend requests)
+        // Only applies if user has already requested a resend (not the initial login)
+        if (user.getLastOtpSentAt() != null) {
+            LocalDateTime cooldownEnd = user.getLastOtpSentAt().plusSeconds(otpResendCooldownSeconds);
+            if (LocalDateTime.now().isBefore(cooldownEnd)) {
+                throw new RateLimitCooldownException("Please wait before requesting a new OTP.");
+            }
+        }
+
+        // Reuse existing OTP if still valid, otherwise generate new one
+        if (LocalDateTime.now().isBefore(user.getOtpExpiry()) && !user.isOtpVerified()) {
+            // Resend same OTP
+            user.setLastOtpSentAt(LocalDateTime.now());
+            userRepository.save(user);
+
+            try {
+                emailService.sendOtpEmail(user.getEmail(), user.getOtpCode(), user.getFirstName());
+                logger.info("Login OTP resent (same code) to: {}", user.getEmail());
+            } catch (Exception e) {
+                logger.warn("Failed to resend login OTP to {}: {}", user.getEmail(), e.getMessage());
+            }
+        } else {
+            // Generate new OTP
+            generateAndSendLoginOtp(user);
+        }
+    }
+
+    /**
+     * Verify OTP for 2FA login.
+     * Accepts either username or email — whichever was used during login.
+     * Returns the user if OTP is valid, throws exception otherwise.
+     */
+    @Transactional
+    public User verifyLoginOtp(String usernameOrEmail, String otp) {
+        User user = userRepository.findByUsername(usernameOrEmail)
+            .or(() -> userRepository.findByEmail(usernameOrEmail))
+            .orElseThrow(() -> new ResourceNotFoundException("User not found: " + usernameOrEmail));
+
+        if (user.getOtpCode() == null || user.getOtpExpiry() == null) {
+            throw new UnauthorizedException("No OTP generated. Please login again.");
+        }
+
+        if (LocalDateTime.now().isAfter(user.getOtpExpiry())) {
+            throw new UnauthorizedException("OTP has expired. Please login again.");
+        }
+
+        if (!user.getOtpCode().equals(otp)) {
+            throw new UnauthorizedException("Invalid OTP. Please try again.");
+        }
+
+        user.setOtpVerified(true);
+        user.setOtpCode(null);
+        user.setOtpExpiry(null);
+        userRepository.save(user);
+
+        logger.info("Login OTP verified successfully for: {}", user.getUsername());
+        return user;
     }
 }

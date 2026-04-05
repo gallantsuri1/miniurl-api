@@ -158,6 +158,7 @@ docker run -e SPRING_PROFILES_ACTIVE=prod miniurl/miniurl-api:latest
 
 ### Authentication & Security
 - **JWT Authentication** - 60-minute tokens
+- **Two-Factor Authentication (2FA)** - OTP verification after login (toggleable via feature flag)
 - **Email Invitation** - Admin-sent invites prove email ownership (no verification needed)
 - **Password Reset** - Token-based reset flow
 - **BCrypt Password Hashing** - Secure storage
@@ -414,7 +415,9 @@ git push origin v1.0.0
 ### REST API
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| POST | `/api/auth/login` | Login and get JWT token | No |
+| POST | `/api/auth/login` | Login (returns JWT or OTP pending if 2FA enabled) | No |
+| POST | `/api/auth/verify-otp` | Verify OTP to complete 2FA login | No |
+| POST | `/api/auth/resend-otp` | Resend OTP for 2FA login | No |
 | POST | `/api/auth/signup` | Register new user (invitation token required) | No |
 | GET | `/api/auth/verify-email-invite?token={token}` | Validate email invitation token | No |
 | GET | `/api/auth/verify-email?token={token}` | Validate password reset token | No |
@@ -453,22 +456,23 @@ ADMIN users can manage features for both USER and ADMIN roles independently.
 
 ### Quick Reference
 
-**Features (10 total):**
+**Features (11 total):**
 1. `GLOBAL_USER_SIGNUP` - User Sign Up (GLOBAL)
 2. `GLOBAL_APP_NAME` - App Name (GLOBAL)
-3. `PROFILE_PAGE` - Profile Page
-4. `EXPORT_JSON` - Export to JSON
-5. `URL_SHORTENING` - URL Shortening
-6. `DASHBOARD` - Dashboard
-7. `SETTINGS_PAGE` - Settings Page
-8. `EMAIL_INVITE` - Email Invitations
-9. `USER_MANAGEMENT` - User Management
-10. `FEATURE_MANAGEMENT` - Feature Management
+3. `TWO_FACTOR_AUTH` - Two-Factor Authentication (GLOBAL, enabled by default)
+4. `PROFILE_PAGE` - Profile Page
+5. `EXPORT_JSON` - Export to JSON
+6. `URL_SHORTENING` - URL Shortening
+7. `DASHBOARD` - Dashboard
+8. `SETTINGS_PAGE` - Settings Page
+9. `EMAIL_INVITE` - Email Invitations
+10. `USER_MANAGEMENT` - User Management
+11. `FEATURE_MANAGEMENT` - Feature Management
 
 **Total Records:**
-- Features: 10 rows
+- Features: 11 rows
 - Feature Flags: 16 rows (8 features × 2 roles)
-- Global Flags: 2 rows (GLOBAL_USER_SIGNUP, GLOBAL_APP_NAME)
+- Global Flags: 3 rows (GLOBAL_USER_SIGNUP, GLOBAL_APP_NAME, TWO_FACTOR_AUTH)
 
 ### API Endpoints
 
@@ -798,6 +802,22 @@ After successful registration, the invitation status is automatically changed fr
 | Email in request | Required | ❌ Not required (from token) |
 | Invitation token | Not required | ✅ Required |
 
+### Signup Validation Rules (NIST SP 800-63B)
+
+All signup requests (invitation-based or otherwise) enforce these validation rules:
+
+| Field | Rule | Valid Examples | Invalid Examples |
+|-------|------|---------------|-----------------|
+| **firstName** | 1-100 chars, letters + spaces + hyphens + apostrophes | `"John"`, `"José"`, `"Jean-Luc"`, `"O'Brien"` | `"John123"`, `"J@hn"`, `""` |
+| **lastName** | Same as firstName | `"Doe"`, `"van der Berg"` | `"Doe!"`, `"123"` |
+| **username** | 3-50 chars, starts with letter, `[a-zA-Z0-9_]` | `"johndoe"`, `"user_123"`, `"abc"` | `"1user"`, `"a-b"`, `"ab"`, `"_user"` |
+| **password** | Min 8 chars, no complexity requirements | `"MyStr0ng!Pass"`, `"correct horse battery"` | `"short"`, `"password"`, `"123456"` |
+| **password** | Must not be a common/breached password | `"Xk9#mP2$vL"` | `"password123"`, `"qwerty"`, `"admin"` |
+| **password** | Must not contain username | `"Str0ng!Pass"` (user: `johndoe`) | `"johndoe123"` (user: `johndoe`) |
+| **username** | Reserved words rejected | `"developer_john"`, `"user_42"` | `"admin"`, `"root"`, `"system"`, `"api"` |
+
+**Why NIST-compliant?** NIST SP 800-63B removed complexity requirements because they force predictable patterns (like `Password1!`). Length + breach-list checking is more effective than mandatory special chars.
+
 ---
 
 ### Pagination
@@ -1111,15 +1131,87 @@ pip3 install bcrypt
 - Email: 3 attempts, 2s base
 - URL validation: 2 attempts, 500ms base
 
+### Two-Factor Authentication (2FA)
+
+Login supports optional two-factor authentication controlled by the `TWO_FACTOR_AUTH` global feature flag. When enabled, users must verify a 6-digit OTP sent to their email after entering valid credentials.
+
+**2FA Login Flow:**
+
+```
+1. POST /api/auth/login {"username":"suri","password":"****"}
+   → If 2FA disabled: Returns JWT token directly
+   → If 2FA enabled: Returns OTP pending response
+
+2a. POST /api/auth/verify-otp {"username":"suri","otp":"482156"}
+   → Returns JWT token after successful OTP verification
+
+2b. POST /api/auth/resend-otp {"username":"suri"}
+   → Resends same OTP if still valid, or generates new one if expired
+   → Then use verify-otp to complete login
+```
+
+**Login Response (2FA Enabled):**
+```json
+{
+  "success": true,
+  "message": "OTP sent to your email",
+  "data": {
+    "otpRequired": true,
+    "email": "s***b@gmail.com"
+  }
+}
+```
+
+**Verify OTP Response:**
+```json
+{
+  "success": true,
+  "message": "Login successful",
+  "data": {
+    "token": "eyJhbGciOiJIUzUxMiJ9...",
+    "username": "suri",
+    "userId": 1,
+    "firstName": "John",
+    "lastName": "Doe"
+  }
+}
+```
+
+**Toggle 2FA:**
+```sql
+-- Disable 2FA
+UPDATE global_flags gf
+JOIN features f ON gf.feature_id = f.id
+SET gf.enabled = false
+WHERE f.feature_key = 'TWO_FACTOR_AUTH';
+
+-- Enable 2FA
+UPDATE global_flags gf
+JOIN features f ON gf.feature_id = f.id
+SET gf.enabled = true
+WHERE f.feature_key = 'TWO_FACTOR_AUTH';
+```
+
+**Resend OTP Behavior:**
+- If the existing OTP is still **valid** (not expired): the **same OTP is resent** — your original code still works
+- If the existing OTP is **expired**: a **new OTP is generated**
+- **30-second cooldown** between consecutive OTP sends (applies to both login and resend-otp)
+- Repeated calls to `POST /api/auth/login` within 30s return: *"OTP already sent. Please wait 30 seconds before trying again."*
+
+**Key Design Notes:**
+- The `username` field in verify-otp and resend-otp accepts either the username **or** email — use the same identifier you used during login
+- The masked email in the login response (`s***b@gmail.com`) is for display only — the UI shows it to the user but uses their original login input for verification
+- OTP expires after 10 minutes (configurable via `app.otp.expiry-minutes`)
+
 ### Rate Limiting (Bucket4j + Caffeine)
 
-Login endpoints use **dual-layer** rate limiting (per-IP + per-username) to protect against brute-force attacks while allowing users behind shared NATs/corporate networks to login normally.
+Login endpoints use **dual-layer** rate limiting (per-IP + per-username) to protect against brute-force attacks while allowing users behind shared NATs/corporate networks to login normally. Password reset and OTP endpoints also have dual-layer (per-IP + per-email) protection.
 
-| Endpoint | Per-IP Limit | Per-Username Limit | Purpose |
-|----------|-------------|-------------------|---------|
-| Login | 100 req / 15 min | 5 req / 5 min | Brute force protection (works for non-existent users) |
-| Password Reset | 60 req / 1 hr | — | Email bombing prevention |
-| OTP | 30 req / 15 min | — | OTP abuse prevention |
+| Endpoint | Per-IP Limit | Per-User Limit | Purpose |
+|----------|-------------|---------------|---------|
+| Login | 100 req / 15 min | 5 req / 5 min (username) | Brute force protection (works for non-existent users) |
+| Password Reset | 60 req / 1 hr | 3 req / 1 hr (email) | Prevents targeting specific accounts |
+| OTP Verify/Resend | 30 req / 15 min | 5 req / 5 min (email/username) | Brute-force protection per user |
 | Signup | 20 req / 1 hr | — | Spam prevention |
 | Email Verification | 50 req / 1 hr | — | Token validation abuse prevention |
 | URL Creation | 500 req / 1 hr | — | Fair usage |

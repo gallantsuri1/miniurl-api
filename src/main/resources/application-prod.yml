@@ -73,9 +73,17 @@ app:
     password-reset:
       requests: ${APP_RATE_LIMIT_PASSWORD_RESET_REQUESTS:60}
       seconds: ${APP_RATE_LIMIT_PASSWORD_RESET_SECONDS:3600}
+    # Password Reset: per-email (prevents targeting specific accounts)
+    password-reset-by-email:
+      requests: ${APP_RATE_LIMIT_PASSWORD_RESET_BY_EMAIL_REQUESTS:3}
+      seconds: ${APP_RATE_LIMIT_PASSWORD_RESET_BY_EMAIL_SECONDS:3600}
     otp:
       requests: ${APP_RATE_LIMIT_OTP_REQUESTS:30}
       seconds: ${APP_RATE_LIMIT_OTP_SECONDS:900}
+    # OTP: per-email/username (brute-force protection)
+    otp-by-email:
+      requests: ${APP_RATE_LIMIT_OTP_BY_EMAIL_REQUESTS:5}
+      seconds: ${APP_RATE_LIMIT_OTP_BY_EMAIL_SECONDS:300}
     signup:
       requests: ${APP_RATE_LIMIT_SIGNUP_REQUESTS:20}
       seconds: ${APP_RATE_LIMIT_SIGNUP_SECONDS:3600}

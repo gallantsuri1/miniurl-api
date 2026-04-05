@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS users (
     status ENUM('ACTIVE','DELETED','SUSPENDED') NOT NULL DEFAULT 'ACTIVE',
     failed_login_attempts INT DEFAULT 0,
     lockout_time DATETIME,
+    last_otp_sent_at DATETIME,
     token_version INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -67,20 +68,6 @@ CREATE TABLE IF NOT EXISTS urls (
     CONSTRAINT fk_urls_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_short_code (short_code),
     INDEX idx_user_id (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ===========================================
--- OTP_TOKENS TABLE
--- ===========================================
-CREATE TABLE IF NOT EXISTS otp_tokens (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    email VARCHAR(255) NOT NULL,
-    otp_code VARCHAR(6) NOT NULL,
-    expiry_time DATETIME NOT NULL,
-    used BOOLEAN DEFAULT FALSE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_email (email),
-    INDEX idx_otp_code (otp_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ===========================================
@@ -169,14 +156,15 @@ CREATE TABLE IF NOT EXISTS features (
 INSERT INTO features (feature_key, feature_name, description) VALUES
     ('GLOBAL_USER_SIGNUP', 'User Sign Up', 'Allow new user registration (global)'),
     ('GLOBAL_APP_NAME', 'MiniURL', 'A place for all your URL''s!'),
-    ('PROFILE_PAGE', 'Profile Page', 'User profile management'),
+    ('PROFILE_PAGE', 'Profile', 'User profile management'),
     ('EXPORT_JSON', 'Export to JSON', 'Export user data as JSON'),
     ('URL_SHORTENING', 'URL Shortening', 'Create short URLs'),
     ('DASHBOARD', 'Dashboard', 'User dashboard'),
-    ('SETTINGS_PAGE', 'Settings Page', 'Account settings and password change'),
+    ('SETTINGS_PAGE', 'Settings', 'Account settings and password change'),
     ('EMAIL_INVITE', 'Email Invitations', 'Send email invitations for user signup'),
     ('USER_MANAGEMENT', 'User Management', 'Admin user management'),
-    ('FEATURE_MANAGEMENT', 'Feature Management', 'Manage application features')
+    ('FEATURE_MANAGEMENT', 'Feature Management', 'Manage application features'),
+    ('TWO_FACTOR_AUTH', 'Two-Factor Authentication', 'Require OTP verification after login')
 ON DUPLICATE KEY UPDATE feature_name = VALUES(feature_name);
 
 -- ===========================================
@@ -232,16 +220,16 @@ CREATE TABLE IF NOT EXISTS global_flags (
     UNIQUE KEY uk_global_feature (feature_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Insert global flags (GLOBAL_USER_SIGNUP disabled, GLOBAL_APP_NAME enabled by default)
+-- Insert global flags (GLOBAL_USER_SIGNUP disabled, GLOBAL_APP_NAME enabled, TWO_FACTOR_AUTH enabled by default)
 INSERT IGNORE INTO global_flags (feature_id, enabled)
-SELECT id, CASE WHEN feature_key = 'GLOBAL_USER_SIGNUP' THEN false ELSE true END
-FROM features WHERE feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME');
+SELECT id, CASE WHEN feature_key IN ('GLOBAL_USER_SIGNUP') THEN false ELSE true END
+FROM features WHERE feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME', 'TWO_FACTOR_AUTH');
 
 -- Update enabled status if records already exist (idempotent)
 UPDATE global_flags gf
 JOIN features f ON gf.feature_id = f.id
 SET gf.enabled = CASE WHEN f.feature_key = 'GLOBAL_USER_SIGNUP' THEN false ELSE true END
-WHERE f.feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME');
+WHERE f.feature_key IN ('GLOBAL_USER_SIGNUP', 'GLOBAL_APP_NAME', 'TWO_FACTOR_AUTH');
 
 -- ===========================================
 -- DEFAULT DATA

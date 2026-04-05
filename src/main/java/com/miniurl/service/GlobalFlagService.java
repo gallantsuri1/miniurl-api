@@ -167,4 +167,17 @@ public class GlobalFlagService {
                 .map(gf -> gf.getFeature().getFeatureName())
                 .orElse(null);
     }
+
+    /**
+     * Check if 2FA (Two-Factor Authentication) is enabled.
+     * Returns true if the TWO_FACTOR_AUTH global flag exists and is enabled.
+     *
+     * @return true if 2FA is enabled, false otherwise
+     */
+    @Transactional(readOnly = true)
+    public boolean isTwoFactorAuthEnabled() {
+        return globalFlagRepository.findByFeatureKey("TWO_FACTOR_AUTH")
+                .map(GlobalFlag::isEnabled)
+                .orElse(false);
+    }
 }

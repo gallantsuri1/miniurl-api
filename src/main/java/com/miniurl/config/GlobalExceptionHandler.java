@@ -1,6 +1,7 @@
 package com.miniurl.config;
 
 import com.miniurl.dto.ApiResponse;
+import com.miniurl.exception.RateLimitCooldownException;
 import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.exception.UnauthorizedException;
 import com.miniurl.exception.UrlValidationException;
@@ -65,6 +66,17 @@ public class GlobalExceptionHandler {
         logger.debug("Unauthorized: {}", ex.getMessage());
         return ResponseEntity
             .status(HttpStatus.UNAUTHORIZED)
+            .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Handle rate limit cooldown errors (400 Bad Request)
+     */
+    @ExceptionHandler(RateLimitCooldownException.class)
+    public ResponseEntity<ApiResponse> handleRateLimitCooldownException(RateLimitCooldownException ex) {
+        logger.debug("Rate limit cooldown: {}", ex.getMessage());
+        return ResponseEntity
+            .badRequest()
             .body(ApiResponse.error(ex.getMessage()));
     }
 

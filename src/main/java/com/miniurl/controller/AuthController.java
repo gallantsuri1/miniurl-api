@@ -7,6 +7,7 @@ import com.miniurl.exception.UnauthorizedException;
 import com.miniurl.repository.UserRepository;
 import com.miniurl.service.AuthService;
 import com.miniurl.service.CustomUserDetailsService;
+import com.miniurl.service.GlobalFlagService;
 import com.miniurl.util.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -40,18 +41,21 @@ public class AuthController {
     private final UserRepository userRepository;
     private final CustomUserDetailsService userDetailsService;
     private final AuthService authService;
+    private final GlobalFlagService globalFlagService;
 
     public AuthController(
             AuthenticationManager authenticationManager,
             JwtUtil jwtUtil,
             UserRepository userRepository,
             CustomUserDetailsService userDetailsService,
-            AuthService authService) {
+            AuthService authService,
+            GlobalFlagService globalFlagService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.userRepository = userRepository;
         this.userDetailsService = userDetailsService;
         this.authService = authService;
+        this.globalFlagService = globalFlagService;
     }
 
     @PostMapping("/signup")
@@ -64,21 +68,27 @@ public class AuthController {
             1. Admin sends invite to user via email using /api/admin/email-invites/send
             2. User receives email with invitation link containing invitationToken
             3. User clicks link: http://localhost:3000/signup?invite=<invitationToken>
-            4. UI validates token using /api/auth/verify-email?token=<invitationToken>
+            4. UI validates token using /api/auth/verify-email-invite?token=<invitationToken>
             5. UI shows signup form with First Name, Last Name, Username, Password fields
             6. User submits form with invitationToken to this endpoint
+
+            **Validation Rules (NIST SP 800-63B compliant):**
+            - **firstName/lastName**: 1-100 chars, letters + spaces + hyphens + apostrophes only
+            - **username**: 3-50 chars, must start with letter, alphanumeric + underscore only
+            - **password**: Min 8 chars, no complexity requirements, must not be a common password
+            - Reserved usernames (admin, root, system, etc.) are rejected
 
             **Process:**
             1. Validates invitation token (required, extracted from request)
             2. Extracts email from the invitation token
-            3. Validates input (username length, password strength - min 12 chars)
+            3. Validates input (field formats, password strength, reserved usernames)
             4. Checks if email/username already exists (blocks if exists)
             5. Creates user with provided password
             6. Marks email as verified (no verification needed - admin already sent invite)
             7. Marks invitation as accepted
             8. Sends congratulations email
 
-            **Note:** 
+            **Note:**
             - Email is NOT provided in the request - it is extracted from the invitation token.
             - Email verification is NOT required - admin invite proves email ownership.
             - User can login immediately after registration.
@@ -93,37 +103,43 @@ public class AuthController {
                       "message": "Successfully registered!"
                     }
                     """))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request or username/email already exists",
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request or validation failure",
             content = @Content(schema = @Schema(implementation = ApiResponse.class),
                 examples = {
-                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Email Exists", value = """
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Invalid First Name", value = """
                         {
                           "success": false,
-                          "message": "Email already registered"
+                          "message": "First name may only contain letters, spaces, hyphens, and apostrophes"
                         }
                         """),
-                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Username Exists", value = """
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Invalid Username", value = """
                         {
                           "success": false,
-                          "message": "Username already taken"
-                        }
-                        """),
-                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Invalid Token", value = """
-                        {
-                          "success": false,
-                          "message": "Invalid or expired invitation token: This invite has expired"
-                        }
-                        """),
-                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Missing Token", value = """
-                        {
-                          "success": false,
-                          "message": "Invitation token is required"
+                          "message": "Username must start with a letter and contain only letters, numbers, and underscores"
                         }
                         """),
                     @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Weak Password", value = """
                         {
                           "success": false,
                           "message": "Password must be at least 8 characters long"
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Common Password", value = """
+                        {
+                          "success": false,
+                          "message": "Password is too common. Please choose a stronger password."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Reserved Username", value = """
+                        {
+                          "success": false,
+                          "message": "Username 'admin' is reserved. Please choose another."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Invalid Token", value = """
+                        {
+                          "success": false,
+                          "message": "Invalid or expired invitation token: This invite has expired"
                         }
                         """)
                 }))
@@ -266,17 +282,22 @@ public class AuthController {
         summary = "Request password reset",
         description = """
             Send password reset link to user's email.
-            
+
             **Security:**
-            - Email bombing protection (max 3 requests per hour)
+            - Email bombing protection (max 3 requests per hour per email)
+            - IP-based rate limiting (max 60 requests per hour)
             - Doesn't reveal if email exists (prevents enumeration)
             - Reset token expires in 15 minutes
-            
+
             **Process:**
             1. User enters email address
             2. System generates secure reset token
             3. Reset link sent via email
             4. User clicks link to reset password
+
+            **Rate Limits:**
+            - Per-email: 3 requests per hour
+            - Per-IP: 60 requests per hour
             """
     )
     @ApiResponses(value = {
@@ -368,36 +389,63 @@ public class AuthController {
     @Operation(
         summary = "User login",
         description = """
-            Authenticate user and receive JWT token.
-            
+            Authenticate user with credentials.
+
+            **Two-Factor Authentication (2FA):**
+            - If 2FA is enabled (TWO_FACTOR_AUTH global flag), an OTP is sent to the user's email
+            - The response will include `otpRequired: true` and the user's masked email
+            - The user must then call POST /api/auth/verify-otp with the OTP to complete login
+            - If 2FA is disabled, the JWT token is returned immediately
+
             **Account Lockout Protection:**
             - Account locks after 5 failed login attempts
             - Lockout duration: 5 minutes
             - Automatic reset after lockout expires
-            
+
             **Authentication:**
             - Accepts username or email
-            - Returns JWT token valid for 1 hour
-            - Includes user info in response
+            - Returns JWT token (if 2FA disabled) or OTP pending response (if 2FA enabled)
             """
     )
     @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Login successful",
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Login successful or OTP sent",
             content = @Content(schema = @Schema(implementation = ApiResponse.class),
-                examples = @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Success", value = """
-                    {
-                      "success": true,
-                      "message": "Login successful",
-                      "data": {
-                        "token": "eyJhbGciOiJIUzUxMiJ9...",
-                        "username": "johndoe",
-                        "userId": 123,
-                        "mustChangePassword": false,
-                        "firstName": "John",
-                        "lastName": "Doe"
-                      }
-                    }
-                    """))),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "2FA Disabled - Direct Login", value = """
+                        {
+                          "success": true,
+                          "message": "Login successful",
+                          "data": {
+                            "token": "eyJhbGciOiJIUzUxMiJ9...",
+                            "username": "johndoe",
+                            "userId": 123,
+                            "mustChangePassword": false,
+                            "firstName": "John",
+                            "lastName": "Doe"
+                          }
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "2FA Enabled - OTP Required", value = """
+                        {
+                          "success": true,
+                          "message": "OTP sent to your email",
+                          "data": {
+                            "otpRequired": true,
+                            "email": "j***e@example.com"
+                          }
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "2FA Cooldown (repeat login within 30s)", value = """
+                        {
+                          "success": true,
+                          "message": "OTP already sent. Please wait 30 seconds before trying again.",
+                          "data": {
+                            "otpRequired": true,
+                            "email": "j***e@example.com"
+                          }
+                        }
+                        """)
+                })),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid credentials or account locked",
             content = @Content(schema = @Schema(implementation = ApiResponse.class),
                 examples = {
@@ -438,9 +486,27 @@ public class AuthController {
 
             user.resetFailedLoginAttempts();
             userRepository.save(user);
-
             authService.updateLastLogin(user.getId());
 
+            // Check if 2FA is enabled
+            boolean twoFactorEnabled = globalFlagService.isTwoFactorAuthEnabled();
+
+            if (twoFactorEnabled) {
+                // Reuse existing valid OTP or generate/resend via service
+                try {
+                    authService.sendLoginOtp(user);
+                } catch (com.miniurl.exception.RateLimitCooldownException e) {
+                    String maskedEmail = maskEmail(user.getEmail());
+                    LoginOtpResponse otpResponse = new LoginOtpResponse("Please wait before requesting a new OTP.", maskedEmail);
+                    return ResponseEntity.ok(ApiResponse.success("OTP already sent. Please wait 30 seconds before trying again.", otpResponse));
+                }
+
+                String maskedEmail = maskEmail(user.getEmail());
+                LoginOtpResponse otpResponse = new LoginOtpResponse("OTP sent to your email", maskedEmail);
+                return ResponseEntity.ok(ApiResponse.success("OTP sent to your email", otpResponse));
+            }
+
+            // 2FA disabled - return JWT directly
             UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
             String token = jwtUtil.generateToken(userDetails, user.getTokenVersion());
 
@@ -479,6 +545,170 @@ public class AuthController {
             }
             return ResponseEntity.badRequest().body(ApiResponse.error("Invalid username or password"));
         }
+    }
+
+    @PostMapping("/verify-otp")
+    @Operation(
+        summary = "Verify OTP for 2FA login",
+        description = """
+            Verify the OTP sent during login to complete authentication.
+
+            **Flow:**
+            1. User calls POST /api/auth/login with credentials
+            2. If 2FA is enabled, OTP is sent to user's email
+            3. User calls this endpoint with their username (or email) and OTP
+            4. If OTP is valid, JWT token is returned
+            5. If OTP is invalid or expired, error is returned
+
+            **Note:** The `username` field accepts either the username or email —
+            use the same identifier you used during login.
+
+            **OTP Expiry:** 10 minutes (configurable via app.otp.expiry-minutes)
+
+            **Rate Limits:**
+            - Per-email/username: 5 requests per 5 minutes
+            - Per-IP: 30 requests per 15 minutes
+            """
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP verified, login complete",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Success", value = """
+                    {
+                      "success": true,
+                      "message": "Login successful",
+                      "data": {
+                        "token": "eyJhbGciOiJIUzUxMiJ9...",
+                        "username": "johndoe",
+                        "userId": 123,
+                        "mustChangePassword": false,
+                        "firstName": "John",
+                        "lastName": "Doe"
+                      }
+                    }
+                    """))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid or expired OTP",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Invalid OTP", value = """
+                        {
+                          "success": false,
+                          "message": "Invalid OTP. Please try again."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Expired OTP", value = """
+                        {
+                          "success": false,
+                          "message": "OTP has expired. Please login again."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "No OTP", value = """
+                        {
+                          "success": false,
+                          "message": "No OTP generated. Please login again."
+                        }
+                        """)
+                }))
+    })
+    public ResponseEntity<ApiResponse> verifyOtp(@Valid @RequestBody OtpVerificationRequest request) {
+        try {
+            User user = authService.verifyLoginOtp(request.getUsername(), request.getOtp());
+
+            UserDetails userDetails = userDetailsService.loadUserByUsername(user.getUsername());
+            String token = jwtUtil.generateToken(userDetails, user.getTokenVersion());
+
+            LoginResponse response = LoginResponse.builder()
+                .token(token)
+                .username(user.getUsername())
+                .userId(user.getId())
+                .mustChangePassword(user.isMustChangePassword())
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
+                .build();
+
+            return ResponseEntity.ok(ApiResponse.success("Login successful", response));
+
+        } catch (UnauthorizedException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/resend-otp")
+    @Operation(
+        summary = "Resend OTP for 2FA login",
+        description = """
+            Resend the OTP if the user didn't receive it or it expired.
+
+            **Behavior:**
+            - If the existing OTP is still valid (not expired): **same OTP is resent**
+            - If the existing OTP is expired: **new OTP is generated**
+            - 30-second cooldown between consecutive OTP sends
+
+            **Rate Limits:**
+            - Per-email/username: 5 requests per 5 minutes
+            - Per-IP: 30 requests per 15 minutes
+
+            **Requirements:**
+            - User must have initiated login (POST /api/auth/login) first
+            - Username or email must match the one used during login
+            """
+    )
+    @ApiResponses(value = {
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "OTP resent",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "OTP Resent", value = """
+                        {
+                          "success": true,
+                          "message": "OTP resent to your email"
+                        }
+                        """)
+                })),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Validation failure",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "User Not Found", value = """
+                        {
+                          "success": false,
+                          "message": "User not found: nonexistent"
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "No OTP Generated", value = """
+                        {
+                          "success": false,
+                          "message": "No OTP generated. Please login again."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Resend Cooldown", value = """
+                        {
+                          "success": false,
+                          "message": "Please wait before requesting a new OTP."
+                        }
+                        """)
+                }))
+    })
+    public ResponseEntity<ApiResponse> resendOtp(@Valid @RequestBody ResendOtpRequest request) {
+        try {
+            authService.resendLoginOtp(request.getUsername());
+            return ResponseEntity.ok(ApiResponse.success("OTP resent to your email"));
+        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        } catch (com.miniurl.exception.RateLimitCooldownException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+        }
+    }
+
+    /**
+     * Mask email address for privacy in OTP response.
+     * Example: "johndoe@example.com" -> "j***e@example.com"
+     */
+    private String maskEmail(String email) {
+        if (email == null || email.length() < 5) return "***";
+        int atIndex = email.indexOf('@');
+        if (atIndex <= 1) return "***";
+        return email.charAt(0) + "***" + email.charAt(atIndex - 1) + email.substring(atIndex);
     }
 
     @PostMapping("/change-password")

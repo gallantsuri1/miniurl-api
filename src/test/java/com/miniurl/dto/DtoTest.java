@@ -245,25 +245,26 @@ class DtoTest {
     @DisplayName("OtpVerificationRequest - all constructors and methods")
     void otpVerificationRequest() {
         OtpVerificationRequest request = new OtpVerificationRequest();
-        request.setEmail("email@example.com");
+        request.setUsername("testuser");
         request.setOtp("123456");
-        
-        assertEquals("email@example.com", request.getEmail());
+
+        assertEquals("testuser", request.getUsername());
         assertEquals("123456", request.getOtp());
-        
-        request = new OtpVerificationRequest("email2@example.com", "654321");
-        assertEquals("email2@example.com", request.getEmail());
+
+        request = new OtpVerificationRequest("user2", "654321");
+        assertEquals("user2", request.getUsername());
+        assertEquals("654321", request.getOtp());
     }
 
     @Test
     @DisplayName("ResendOtpRequest - all constructors and methods")
     void resendOtpRequest() {
         ResendOtpRequest request = new ResendOtpRequest();
-        request.setEmail("email@example.com");
-        assertEquals("email@example.com", request.getEmail());
-        
-        request = new ResendOtpRequest("email2@example.com");
-        assertEquals("email2@example.com", request.getEmail());
+        request.setUsername("testuser");
+        assertEquals("testuser", request.getUsername());
+
+        request = new ResendOtpRequest("user2");
+        assertEquals("user2", request.getUsername());
     }
 
     @Test
@@ -349,5 +350,25 @@ class DtoTest {
 
         // Test toString
         assertNotNull(dto.toString());
+    }
+
+    @Test
+    @DisplayName("LoginOtpResponse - all constructors and methods")
+    void loginOtpResponse() {
+        // Test default constructor + setters
+        LoginOtpResponse response = new LoginOtpResponse();
+        response.setMessage("OTP sent to your email");
+        response.setOtpRequired(true);
+        response.setEmail("j***e@example.com");
+
+        assertEquals("OTP sent to your email", response.getMessage());
+        assertTrue(response.isOtpRequired());
+        assertEquals("j***e@example.com", response.getEmail());
+
+        // Test convenience constructor
+        response = new LoginOtpResponse("Login with OTP", "user@test.com");
+        assertEquals("Login with OTP", response.getMessage());
+        assertTrue(response.isOtpRequired());
+        assertEquals("user@test.com", response.getEmail());
     }
 }

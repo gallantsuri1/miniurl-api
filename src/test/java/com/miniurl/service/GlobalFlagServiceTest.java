@@ -234,4 +234,49 @@ class GlobalFlagServiceTest {
             globalFlagService.deleteGlobalFlag(99L);
         });
     }
+
+    // ==================== 2FA Tests ====================
+
+    @Test
+    @DisplayName("isTwoFactorAuthEnabled should return true when enabled")
+    void isTwoFactorAuthEnabled_WhenEnabled_ReturnsTrue() {
+        // Arrange
+        Feature twoFactorFeature = new Feature("TWO_FACTOR_AUTH", "Two-Factor Authentication", "Require OTP");
+        GlobalFlag twoFactorFlag = new GlobalFlag(twoFactorFeature, true);
+        when(globalFlagRepository.findByFeatureKey("TWO_FACTOR_AUTH")).thenReturn(Optional.of(twoFactorFlag));
+
+        // Act
+        boolean result = globalFlagService.isTwoFactorAuthEnabled();
+
+        // Assert
+        assertTrue(result);
+    }
+
+    @Test
+    @DisplayName("isTwoFactorAuthEnabled should return false when disabled")
+    void isTwoFactorAuthEnabled_WhenDisabled_ReturnsFalse() {
+        // Arrange
+        Feature twoFactorFeature = new Feature("TWO_FACTOR_AUTH", "Two-Factor Authentication", "Require OTP");
+        GlobalFlag twoFactorFlag = new GlobalFlag(twoFactorFeature, false);
+        when(globalFlagRepository.findByFeatureKey("TWO_FACTOR_AUTH")).thenReturn(Optional.of(twoFactorFlag));
+
+        // Act
+        boolean result = globalFlagService.isTwoFactorAuthEnabled();
+
+        // Assert
+        assertFalse(result);
+    }
+
+    @Test
+    @DisplayName("isTwoFactorAuthEnabled should return false when feature flag not found")
+    void isTwoFactorAuthEnabled_WhenNotFound_ReturnsFalse() {
+        // Arrange
+        when(globalFlagRepository.findByFeatureKey("TWO_FACTOR_AUTH")).thenReturn(Optional.empty());
+
+        // Act
+        boolean result = globalFlagService.isTwoFactorAuthEnabled();
+
+        // Assert
+        assertFalse(result);
+    }
 }

@@ -95,7 +95,9 @@ public class SecurityConfig {
                     "/api/auth/verify-email",
                     "/api/auth/verify-email-invite",
                     "/api/auth/forgot-password",
-                    "/api/auth/reset-password"
+                    "/api/auth/reset-password",
+                    "/api/auth/verify-otp",
+                    "/api/auth/resend-otp"
                 ).permitAll()
                 // Public endpoint - URL Redirect
                 .requestMatchers("/r/**").permitAll()

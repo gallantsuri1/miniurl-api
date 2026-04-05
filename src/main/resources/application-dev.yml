@@ -76,7 +76,13 @@ app:
     password-reset:
       requests: 500
       seconds: 60
+    password-reset-by-email:
+      requests: 1000
+      seconds: 60
     otp:
+      requests: 1000
+      seconds: 60
+    otp-by-email:
       requests: 1000
       seconds: 60
     signup:

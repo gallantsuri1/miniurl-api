@@ -48,7 +48,6 @@ if [ $? -eq 0 ]; then
     echo "  - roles"
     echo "  - users"
     echo "  - urls"
-    echo "  - otp_tokens"
     echo "  - verification_tokens"
     echo "  - audit_logs"
     echo ""

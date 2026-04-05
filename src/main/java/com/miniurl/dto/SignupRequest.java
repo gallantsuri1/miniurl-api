@@ -2,30 +2,34 @@ package com.miniurl.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 @Schema(description = "User registration request")
 public class SignupRequest {
 
     @NotBlank(message = "First name is required")
-    @Size(max = 100, message = "First name must be less than 100 characters")
+    @Size(min = 1, max = 100, message = "First name must be between 1 and 100 characters")
+    @Pattern(regexp = "^[\\p{L}\\s'\\-]+$", message = "First name may only contain letters, spaces, hyphens, and apostrophes")
     @Schema(description = "User's first name", example = "John")
     private String firstName;
 
     @NotBlank(message = "Last name is required")
-    @Size(max = 100, message = "Last name must be less than 100 characters")
+    @Size(min = 1, max = 100, message = "Last name must be between 1 and 100 characters")
+    @Pattern(regexp = "^[\\p{L}\\s'\\-]+$", message = "Last name may only contain letters, spaces, hyphens, and apostrophes")
     @Schema(description = "User's last name", example = "Doe")
     private String lastName;
 
     @NotBlank(message = "Username is required")
     @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
-    @Schema(description = "Desired username", example = "johndoe")
+    @Pattern(regexp = "^[a-zA-Z][a-zA-Z0-9_]*$", message = "Username must start with a letter and contain only letters, numbers, and underscores")
+    @Schema(description = "Desired username (3-50 chars, starts with letter, alphanumeric + underscore)", example = "johndoe")
     private String username;
 
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters")
-    @Schema(description = "User's password (min 8 characters)",
-            example = "MyPass123",
+    @Schema(description = "User's password (min 8 characters, no complexity requirements)",
+            example = "MyP@ssw0rd",
             minLength = 8)
     private String password;
 

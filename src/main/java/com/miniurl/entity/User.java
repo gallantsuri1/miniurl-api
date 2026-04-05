@@ -64,6 +64,9 @@ public class User {
     @Column(name = "lockout_time")
     private LocalDateTime lockoutTime;
 
+    @Column(name = "last_otp_sent_at")
+    private LocalDateTime lastOtpSentAt;
+
     public User() {}
 
     public User(String firstName, String lastName, String email, String username, String password) {
@@ -154,6 +157,9 @@ public class User {
     public LocalDateTime getLockoutTime() { return lockoutTime; }
     public void setLockoutTime(LocalDateTime lockoutTime) { this.lockoutTime = lockoutTime; }
 
+    public LocalDateTime getLastOtpSentAt() { return lastOtpSentAt; }
+    public void setLastOtpSentAt(LocalDateTime lastOtpSentAt) { this.lastOtpSentAt = lastOtpSentAt; }
+
     /**
      * Check if account is locked
      */
@@ -215,6 +221,7 @@ public class User {
         private int tokenVersion = 0;
         private int failedLoginAttempts = 0;
         private LocalDateTime lockoutTime;
+        private LocalDateTime lastOtpSentAt;
 
         public Builder id(Long id) { this.id = id; return this; }
         public Builder firstName(String firstName) { this.firstName = firstName; return this; }
@@ -232,6 +239,7 @@ public class User {
         public Builder tokenVersion(int tokenVersion) { this.tokenVersion = tokenVersion; return this; }
         public Builder failedLoginAttempts(int failedLoginAttempts) { this.failedLoginAttempts = failedLoginAttempts; return this; }
         public Builder lockoutTime(LocalDateTime lockoutTime) { this.lockoutTime = lockoutTime; return this; }
+        public Builder lastOtpSentAt(LocalDateTime lastOtpSentAt) { this.lastOtpSentAt = lastOtpSentAt; return this; }
         public User build() {
             User user = new User(firstName, lastName, email, username, password);
             user.id = id;
@@ -245,6 +253,7 @@ public class User {
             user.tokenVersion = tokenVersion;
             user.failedLoginAttempts = failedLoginAttempts;
             user.lockoutTime = lockoutTime;
+            user.lastOtpSentAt = lastOtpSentAt;
             return user;
         }
     }

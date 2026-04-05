@@ -25,12 +25,13 @@ import java.io.InputStreamReader;
 
 /**
  * Rate limiting filter that applies IP-based rate limiting to all requests,
- * with dual-layer (per-IP + per-username) rate limiting for login endpoints.
+ * with dual-layer (per-IP + per-username/email) rate limiting for login,
+ * password reset, and OTP endpoints.
  *
  * Rate limits by endpoint (production defaults):
  * - /auth/login, /api/auth/login: 100 req/15min per IP, 5 req/5min per username
- * - /auth/forgot-password, /api/auth/forgot-password: 60 requests per hour
- * - /auth/verify-otp, /auth/resend-otp, /api/auth/*: 30 requests per 15 minutes
+ * - /auth/forgot-password, /api/auth/forgot-password: 60 req/hr per IP, 3 req/hr per email
+ * - /auth/verify-otp, /auth/resend-otp, /api/auth/*: 30 req/15min per IP, 5 req/5min per email/username
  * - /auth/signup, /api/auth/signup: 20 requests per hour
  * - /api/auth/verify-email: 50 requests per hour (password reset token validation)
  * - /api/auth/verify-email-invite: 50 requests per hour (email invite token validation)
@@ -100,6 +101,74 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             return;
         }
 
+        // For password reset endpoints: check both per-IP and per-email limits
+        if (isPasswordResetPath(requestURI)) {
+            RepeatableRequestWrapper wrappedRequest = new RepeatableRequestWrapper(request);
+            String email = extractField(wrappedRequest, "email");
+
+            Bucket ipBucket = rateLimitConfig.getPasswordResetBucket(clientIp);
+            Bucket emailBucket = email != null ? rateLimitConfig.getPasswordResetByEmailBucket(email) : null;
+
+            boolean ipAllowed = ipBucket.tryConsume(1);
+            boolean emailAllowed = emailBucket == null || emailBucket.tryConsume(1);
+
+            if (!ipAllowed || !emailAllowed) {
+                String reason = !emailAllowed
+                    ? "Rate limit exceeded for email: " + email
+                    : "Rate limit exceeded for IP: " + clientIp;
+                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, reason);
+
+                response.setStatus(429);
+                response.setContentType("application/json");
+                response.setHeader("X-RateLimit-Limit", "1");
+                response.setHeader("X-RateLimit-Remaining", "0");
+                response.setHeader("Retry-After", "3600");
+                response.getWriter().write(
+                    "{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}"
+                );
+                return;
+            }
+
+            filterChain.doFilter(wrappedRequest, response);
+            return;
+        }
+
+        // For OTP endpoints: check both per-IP and per-email/username limits
+        if (isOtpPath(requestURI)) {
+            RepeatableRequestWrapper wrappedRequest = new RepeatableRequestWrapper(request);
+            // Try username first (for verify-otp), then email (for resend-otp)
+            String identifier = extractField(wrappedRequest, "username");
+            if (identifier == null) {
+                identifier = extractField(wrappedRequest, "email");
+            }
+
+            Bucket ipBucket = rateLimitConfig.getOtpBucket(clientIp);
+            Bucket idBucket = identifier != null ? rateLimitConfig.getOtpByEmailBucket(identifier) : null;
+
+            boolean ipAllowed = ipBucket.tryConsume(1);
+            boolean idAllowed = idBucket == null || idBucket.tryConsume(1);
+
+            if (!ipAllowed || !idAllowed) {
+                String reason = !idAllowed
+                    ? "Rate limit exceeded for: " + identifier
+                    : "Rate limit exceeded for IP: " + clientIp;
+                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, reason);
+
+                response.setStatus(429);
+                response.setContentType("application/json");
+                response.setHeader("X-RateLimit-Limit", "1");
+                response.setHeader("X-RateLimit-Remaining", "0");
+                response.setHeader("Retry-After", "300");
+                response.getWriter().write(
+                    "{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}"
+                );
+                return;
+            }
+
+            filterChain.doFilter(wrappedRequest, response);
+            return;
+        }
+
         // For all other endpoints: per-IP rate limiting only
         Bucket bucket = getBucketForPath(requestURI, clientIp);
 
@@ -128,9 +197,31 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     }
 
     /**
+     * Check if the path is a password reset endpoint
+     */
+    private boolean isPasswordResetPath(String path) {
+        return path.startsWith("/auth/forgot-password") || path.startsWith("/api/auth/forgot-password");
+    }
+
+    /**
+     * Check if the path is an OTP endpoint
+     */
+    private boolean isOtpPath(String path) {
+        return path.startsWith("/auth/verify-otp") || path.startsWith("/auth/resend-otp") ||
+               path.startsWith("/api/auth/verify-otp") || path.startsWith("/api/auth/resend-otp");
+    }
+
+    /**
      * Extract username from the cached request body
      */
     private String extractUsername(RepeatableRequestWrapper wrappedRequest) {
+        return extractField(wrappedRequest, "username");
+    }
+
+    /**
+     * Extract a specific field from the cached request body
+     */
+    private String extractField(RepeatableRequestWrapper wrappedRequest, String fieldName) {
         try {
             byte[] content = wrappedRequest.getContentAsByteArray();
             if (content.length > 0) {

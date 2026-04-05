@@ -143,22 +143,6 @@ class EntityTest {
     }
 
     @Test
-    @DisplayName("OtpToken")
-    void otpToken() {
-        OtpToken token = new OtpToken();
-        token.setId(1L);
-        token.setEmail("test@example.com");
-        token.setOtpCode("123456");
-        token.setExpiryTime(LocalDateTime.now().plusMinutes(10));
-        
-        assertEquals(1L, token.getId());
-        assertFalse(token.isExpired());
-        
-        token = new OtpToken("test2@example.com", "654321", LocalDateTime.now().minusMinutes(10));
-        assertTrue(token.isExpired());
-    }
-
-    @Test
     @DisplayName("AuditLog")
     void auditLog() {
         User user = User.builder().id(1L).username("testuser").status(UserStatus.ACTIVE).otpVerified(true).build();
