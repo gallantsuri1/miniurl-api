@@ -31,7 +31,7 @@ public class EmailService {
     @Value("${app.ui-base-url:http://localhost:3000}")
     private String uiBaseUrl;
 
-    @Value("${app.name:MiniURL}")
+    @Value("${app.name:MyURL}")
     private String appName;
 
     public EmailService(JavaMailSender mailSender, TemplateEngine templateEngine,

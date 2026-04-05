@@ -1,4 +1,4 @@
--- MySQL Database Initialization Script for MiniURL
+-- MySQL Database Initialization Script for MyURL
 -- This script creates the database, tables, and initializes all required data
 -- SAFE TO RUN MULTIPLE TIMES - All operations use IF NOT EXISTS or ON DUPLICATE KEY UPDATE
 
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS features (
 -- Insert 10 master features (idempotent)
 INSERT INTO features (feature_key, feature_name, description) VALUES
     ('GLOBAL_USER_SIGNUP', 'User Sign Up', 'Allow new user registration (global)'),
-    ('GLOBAL_APP_NAME', 'MiniURL', 'A place for all your URL''s!'),
+    ('GLOBAL_APP_NAME', 'MyURL', 'A place for all your URL''s!'),
     ('PROFILE_PAGE', 'Profile', 'User profile management'),
     ('EXPORT_JSON', 'Export to JSON', 'Export user data as JSON'),
     ('URL_SHORTENING', 'URL Shortening', 'Create short URLs'),

@@ -94,13 +94,13 @@ class DtoTest {
     void createUrlRequest() {
         CreateUrlRequest request = new CreateUrlRequest();
         request.setUrl("https://example.com");
-        request.setAlias("alias");
+        request.setAlias("mylink");
         assertEquals("https://example.com", request.getUrl());
-        assertEquals("alias", request.getAlias());
-        
-        request = new CreateUrlRequest("https://test.com", "test");
+        assertEquals("mylink", request.getAlias());
+
+        request = new CreateUrlRequest("https://test.com", "customcode");
         assertEquals("https://test.com", request.getUrl());
-        assertEquals("test", request.getAlias());
+        assertEquals("customcode", request.getAlias());
     }
 
     @Test

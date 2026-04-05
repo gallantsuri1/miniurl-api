@@ -1,4 +1,4 @@
-# MiniURL Application Configuration - Production Profile
+# MyURL Application Configuration - Production Profile
 # This profile disables Swagger/OpenAPI documentation and optimizes for production
 
 spring:
@@ -19,7 +19,7 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
       leak-detection-threshold: 30000
-      pool-name: MiniURL API-Prod-HikariPool
+      pool-name: MyURL API-Prod-HikariPool
       initialization-fail-timeout: -1
       connection-init-sql: SELECT 1
       validation-timeout: 5000
@@ -57,7 +57,7 @@ logging:
 
 # Application Settings
 app:
-  name: MiniURL API
+  name: MyURL API
   jwt:
     secret: ${APP_JWT_SECRET}
     expiration-ms: 3600000

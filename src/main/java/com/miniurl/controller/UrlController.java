@@ -40,12 +40,40 @@ public class UrlController {
     @PostMapping
     @Operation(
         summary = "Create shortened URL",
-        description = "Create a new shortened URL with optional custom alias"
+        description = """
+            Create a new shortened URL with optional custom alias.
+
+            **Validation Rules:**
+            - **url**: Required, max 2000 characters, no spaces allowed
+            - **alias**: Optional, 6-20 characters, alphanumeric only (letters + numbers)
+            """
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL created successfully",
             content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request or alias not available")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid URL or alias",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "URL with spaces", value = """
+                        {
+                          "success": false,
+                          "message": "URL must not contain spaces"
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Short alias", value = """
+                        {
+                          "success": false,
+                          "message": "Alias must be at least 6 characters"
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Special chars in alias", value = """
+                        {
+                          "success": false,
+                          "message": "Alias must contain only alphanumeric characters"
+                        }
+                        """)
+                })),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized")
     })
     public ResponseEntity<ApiResponse> createUrl(
             @Parameter(description = "URL creation request", required = true)

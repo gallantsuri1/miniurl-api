@@ -1,6 +1,6 @@
 #!/bin/bash
-# MiniURL API Database Initialization Script
-# This script initializes the MySQL database for MiniURL
+# MyURL API Database Initialization Script
+# This script initializes the MySQL database for MyURL
 
 # Database configuration
 DB_HOST="${DB_HOST:-127.0.0.1}"
@@ -10,7 +10,7 @@ DB_PASS="${DB_PASS:-rootpass}"
 DB_NAME="miniurldb"
 
 echo "==================================="
-echo "MiniURL API Database Initialization"
+echo "MyURL API Database Initialization"
 echo "==================================="
 echo ""
 echo "Database Configuration:"

@@ -130,7 +130,7 @@ class UrlCrudIntegrationTest {
         // Arrange
         Map<String, String> request = new HashMap<>();
         request.put("url", "https://www.example.com");
-        request.put("alias", "mylink");
+        request.put("alias", "mylink123");
 
         // Act & Assert
         mockMvc.perform(post("/api/urls")
@@ -139,8 +139,52 @@ class UrlCrudIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.shortCode").value("mylink"))
+            .andExpect(jsonPath("$.data.shortCode").value("mylink123"))
             .andExpect(jsonPath("$.data.shortUrl").exists());
+    }
+
+    @Test
+    @DisplayName("Create URL with short alias (less than 6 chars) should return 400")
+    void createUrl_withShortAlias_shouldReturnBadRequest() throws Exception {
+        Map<String, String> request = new HashMap<>();
+        request.put("url", "https://www.example.com");
+        request.put("alias", "abc");
+
+        mockMvc.perform(post("/api/urls")
+                .with(csrf())
+                .header("Authorization", "Bearer " + jwtToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Create URL with special chars in alias should return 400")
+    void createUrl_withSpecialCharAlias_shouldReturnBadRequest() throws Exception {
+        Map<String, String> request = new HashMap<>();
+        request.put("url", "https://www.example.com");
+        request.put("alias", "my-link");
+
+        mockMvc.perform(post("/api/urls")
+                .with(csrf())
+                .header("Authorization", "Bearer " + jwtToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Create URL with spaces in URL should return 400")
+    void createUrl_withSpacesInUrl_shouldReturnBadRequest() throws Exception {
+        Map<String, String> request = new HashMap<>();
+        request.put("url", "https://www.example.com/some url");
+
+        mockMvc.perform(post("/api/urls")
+                .with(csrf())
+                .header("Authorization", "Bearer " + jwtToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest());
     }
 
     @Test

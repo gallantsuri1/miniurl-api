@@ -1,4 +1,4 @@
-# MiniURL Application Configuration - Development Profile
+# MyURL Application Configuration - Development Profile
 # This profile enables Swagger/OpenAPI documentation and development-friendly settings
 
 spring:
@@ -19,7 +19,7 @@ spring:
       idle-timeout: 600000
       max-lifetime: 1800000
       leak-detection-threshold: 60000
-      pool-name: MiniURL API-HikariPool
+      pool-name: MyURL API-HikariPool
 
   # JPA Configuration for Development
   jpa:
@@ -62,9 +62,9 @@ logging:
 
 # Application Settings
 app:
-  name: ${APP_NAME:MiniURL API[DEV]}
+  name: ${APP_NAME:MyURL API[DEV]}
   jwt:
-    secret: ${APP_JWT_SECRET:MiniURLSecretKeyForJWTTokenGeneration2024VeryLongSecretKeyForHS512Algorithm}
+    secret: ${APP_JWT_SECRET:MyURLSecretKeyForJWTTokenGeneration2024VeryLongSecretKeyForHS512Algorithm}
     expiration-ms: 3600000
   rate-limit:
     login:

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Reset admin password for MiniURL
+# Reset admin password for MyURL
 # Usage: ./scripts/reset-admin-password.sh [new-password]
 
 set -e

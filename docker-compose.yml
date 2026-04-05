@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # MiniURL API Application
+  # MyURL API Application
   miniurl-api:
     image: ${DOCKER_IMAGE:-gallantsuri1/miniurl-api:v1.0.0}
     container_name: miniurl-api

@@ -85,7 +85,7 @@ class EmailIntegrationTest {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom("noreply@miniurl.com");
         message.setTo("user@example.com");
-        message.setSubject("MiniURL - Verification Code");
+        message.setSubject("MyURL - Verification Code");
         message.setText("Your verification code is: 123456");
 
         javaMailSender.send(message);

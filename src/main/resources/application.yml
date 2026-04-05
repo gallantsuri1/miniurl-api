@@ -1,10 +1,10 @@
-# MiniURL Application Configuration
+# MyURL Application Configuration
 server:
   port: 8080
 
 spring:
   application:
-    name: MiniURL API
+    name: MyURL API
   # Default profile - use 'prod' for production deployments
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
@@ -36,7 +36,7 @@ spring:
 # JWT Configuration
 app:
   jwt:
-    secret: ${APP_JWT_SECRET:MiniURLSecretKeyForJWTTokenGeneration2024VeryLongSecretKeyForHS512Algorithm}
+    secret: ${APP_JWT_SECRET:MyURLSecretKeyForJWTTokenGeneration2024VeryLongSecretKeyForHS512Algorithm}
     expiration-ms: 3600000
 
   # Base URL for email links and redirects
@@ -44,7 +44,7 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:3000}
   otp:
     expiry-minutes: 10
-  name: ${APP_NAME:MiniURL}
+  name: ${APP_NAME:MyURL}
 
 # Actuator Configuration
 management:

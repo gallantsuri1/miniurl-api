@@ -37,9 +37,9 @@ public class OpenApiConfig {
 
         return new OpenAPI()
             .info(new Info()
-                .title("MiniURL API Documentation")
+                .title("MyURL API Documentation")
                 .description("""
-                    ## MiniURL - URL Shortener Service API
+                    ## MyURL - URL Shortener Service API
 
                     This API provides endpoints for:
                     - **Authentication**: Login, signup, password reset, email verification
@@ -59,7 +59,7 @@ public class OpenApiConfig {
                     """)
                 .version("1.0.0")
                 .contact(new Contact()
-                    .name("MiniURL Support")
+                    .name("MyURL Support")
                     .email("support@miniurl.com"))
                 .license(new License()
                     .name("MIT License")

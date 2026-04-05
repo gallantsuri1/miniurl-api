@@ -6,7 +6,7 @@
     <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
 
     <!-- Application name -->
-    <springProperty scope="context" name="APP_NAME" source="app.name" defaultValue="MiniURL API"/>
+    <springProperty scope="context" name="APP_NAME" source="app.name" defaultValue="MyURL API"/>
 
     <!-- Log file configuration -->
     <property name="LOG_DIR" value="${LOG_DIR:-./logs}"/>

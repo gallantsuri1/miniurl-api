@@ -1,4 +1,4 @@
-# MiniURL Test Configuration (H2 In-Memory Database)
+# MyURL Test Configuration (H2 In-Memory Database)
 # This configuration is loaded when 'test' profile is active
 
 server:
@@ -6,7 +6,7 @@ server:
 
 spring:
   application:
-    name: MiniURL API-Test
+    name: MyURL API-Test
 
   # H2 In-Memory Database for Testing - MUST override any MySQL config
   datasource:
@@ -84,7 +84,7 @@ app:
   otp:
     expiry-minutes: 10
     resend-cooldown-seconds: 0
-  name: MiniURL API-Test
+  name: MyURL API-Test
   rate-limit:
     login:
       requests: 1000

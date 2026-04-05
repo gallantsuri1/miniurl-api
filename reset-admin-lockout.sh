@@ -4,7 +4,7 @@
 echo "Resetting admin account lockout..."
 
 # Connect to MySQL and reset failed attempts
-docker exec miniurl-api-mysql mysql -uroot -pMiniURLRootPass2024! miniurldb -e "
+docker exec miniurl-api-mysql mysql -uroot -pMyURLRootPass2024! miniurldb -e "
 UPDATE users 
 SET failed_login_attempts = 0, lockout_time = NULL 
 WHERE username = 'admin';

@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 @ControllerAdvice
 public class AppConfig {
 
-    @Value("${app.name:MiniURL}")
+    @Value("${app.name:MyURL}")
     private String appName;
 
     @ModelAttribute("appName")

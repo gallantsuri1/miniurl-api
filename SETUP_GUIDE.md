@@ -1,4 +1,4 @@
-# MiniURL API - Setup and Deployment Guide
+# MyURL API - Setup and Deployment Guide
 
 ## Table of Contents
 1. [Local Development Setup](#local-development-setup)
@@ -301,10 +301,10 @@ docker compose up -d
 
 ```bash
 # Create backup
-docker exec miniurl-mysql mysqldump -u root -pMiniURLRootPass2024! miniurldb > backup-$(date +%Y%m%d).sql
+docker exec miniurl-mysql mysqldump -u root -pMyURLRootPass2024! miniurldb > backup-$(date +%Y%m%d).sql
 
 # Restore backup
-docker exec -i miniurl-mysql mysql -u root -pMiniURLRootPass2024! miniurldb < backup-20260329.sql
+docker exec -i miniurl-mysql mysql -u root -pMyURLRootPass2024! miniurldb < backup-20260329.sql
 ```
 
 ---
@@ -558,8 +558,8 @@ tail -f /tmp/miniurl.log
 |----------|-------------|---------|----------|
 | `APP_JWT_SECRET` | JWT signing secret | None | ✅ Yes |
 | `APP_BASE_URL` | Application base URL | http://localhost:8080 | ✅ Yes |
-| `MYSQL_ROOT_PASSWORD` | MySQL root password | MiniURLRootPass2024! | ✅ Yes |
-| `MYSQL_PASSWORD` | MySQL user password | MiniURLUserPass2024! | ✅ Yes |
+| `MYSQL_ROOT_PASSWORD` | MySQL root password | MyURLRootPass2024! | ✅ Yes |
+| `MYSQL_PASSWORD` | MySQL user password | MyURLUserPass2024! | ✅ Yes |
 | `SMTP_HOST` | SMTP server host | smtp.gmail.com | ❌ No |
 | `SMTP_PORT` | SMTP server port | 587 | ❌ No |
 | `SERVER_PORT` | Server port | 8080 | ❌ No |

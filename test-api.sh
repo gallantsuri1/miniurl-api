@@ -3,7 +3,7 @@
 BASE_URL="http://localhost:8080"
 
 echo "========================================"
-echo "MiniURL API Endpoint Testing"
+echo "MyURL API Endpoint Testing"
 echo "========================================"
 echo ""
 

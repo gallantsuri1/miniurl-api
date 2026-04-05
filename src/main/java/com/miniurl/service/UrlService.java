@@ -184,12 +184,12 @@ public class UrlService {
             return;
         }
 
-        if (alias.length() < 3) {
-            throw new UrlValidationException("Alias must be at least 3 characters");
+        if (alias.length() < 6) {
+            throw new UrlValidationException("Alias must be at least 6 characters");
         }
 
-        if (!alias.matches("^[a-zA-Z0-9_-]+$")) {
-            throw new UrlValidationException("Alias can only contain letters, numbers, hyphens, and underscores");
+        if (!alias.matches("^[a-zA-Z0-9]+$")) {
+            throw new UrlValidationException("Alias must contain only alphanumeric characters (letters and numbers)");
         }
     }
 

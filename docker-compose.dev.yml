@@ -2,7 +2,7 @@
 version: '3.8'
 
 services:
-  # MiniURL API (Development with volume mount)
+  # MyURL API (Development with volume mount)
   miniurl-api:
     build:
       context: .
@@ -19,7 +19,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-rootpass}
 
       # JWT Configuration
-      APP_JWT_SECRET: ${APP_JWT_SECRET:-MiniURLSecretKeyForJWTTokenGeneration2024VeryLongSecretKeyForHS512Algorithm}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:-MyURLSecretKeyForJWTTokenGeneration2024VeryLongSecretKeyForHS512Algorithm}
       APP_JWT_EXPIRATION_MS: 3600000
 
       # SMTP Configuration

@@ -1,4 +1,4 @@
-# MiniURL API - URL Shortener API
+# MyURL API - URL Shortener API
 
 A RESTful URL shortener API built with Spring Boot, featuring user management, role-based access control, JWT authentication, rate limiting, feature flags, email invitations, and usage tracking.
 
@@ -139,6 +139,15 @@ docker run -e SPRING_PROFILES_ACTIVE=prod miniurl/miniurl-api:latest
   - **100 URLs per day** - Resets at midnight
   - **1000 URLs per month** - Resets on 1st of month
   - **API Endpoint** - `/api/urls/usage-stats` to view usage
+
+### URL Shortening Validation Rules
+
+| Field | Rule | Valid Examples | Invalid Examples |
+|-------|------|---------------|-----------------|
+| **url** | Required, max 2000 chars, no spaces | `https://example.com` | `https://example.com/some url`, (empty) |
+| **alias** | Optional, 6-20 chars, alphanumeric only | `mylink`, `abc123`, `mycode2026` | `abc` (too short), `my-link` (special chars), `my link` (space) |
+
+---
 
 ### User Management
 - **Invitation-Only Registration** - Admin sends email invites to users
@@ -290,7 +299,7 @@ docker compose -f docker-compose-nginx.yml up -d
 **Routing:**
 | Path | Backend | Port |
 |------|---------|------|
-| `/api/*` | MiniURL API | 8090 |
+| `/api/*` | MyURL API | 8090 |
 | `/r/*` | Short URL redirects | 8090 |
 | `/*` | Frontend UI | 3000 |
 
@@ -559,7 +568,7 @@ curl -X GET 'http://localhost:8080/api/features/global'
       {
         "id": 2,
         "featureKey": "GLOBAL_APP_NAME",
-        "featureName": "MiniURL",
+        "featureName": "MyURL",
         "enabled": true
       }
     ],
@@ -1314,7 +1323,7 @@ APP_CORS_ALLOWED_ORIGINS=http://localhost:8080
 
 **Optional:**
 ```bash
-APP_NAME=MiniURL
+APP_NAME=MyURL
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=<email>
@@ -1828,7 +1837,7 @@ APP_PORT=8080
 ### Step 3: Start Services
 
 ```bash
-# Start MySQL and MiniURL
+# Start MySQL and MyURL
 docker compose up -d
 
 # Check status
@@ -1870,7 +1879,7 @@ server {
     add_header X-XSS-Protection "1; mode=block";
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 
-    # Proxy to MiniURL API
+    # Proxy to MyURL API
     location / {
         proxy_pass http://localhost:8080;
         proxy_set_header Host $host;

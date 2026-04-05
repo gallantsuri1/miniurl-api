@@ -15,7 +15,7 @@
     <groupId>com.miniurl</groupId>
     <artifactId>miniurl-api</artifactId>
     <version>1.0.0</version>
-    <name>MiniURL API</name>
+    <name>MyURL API</name>
     <description>URL Shortener API Service</description>
     
     <properties>
