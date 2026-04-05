@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("dev")
+@ActiveProfiles("test")
 @DisplayName("Global Feature Flags Integration Tests")
 class FeatureFlagIntegrationTest {
 
@@ -59,9 +59,13 @@ class FeatureFlagIntegrationTest {
     @BeforeEach
     void setUp() {
         // Clean up
-        globalFlagRepository.deleteAll();
-        featureRepository.deleteAll();
-        userRepository.deleteAll();
+        try {
+            globalFlagRepository.deleteAll();
+            featureRepository.deleteAll();
+            userRepository.deleteAll();
+        } catch (Exception e) {
+            // Ignore cleanup errors
+        }
     }
 
     @Test

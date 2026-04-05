@@ -2,13 +2,11 @@ package com.miniurl.integration;
 
 import com.icegreen.greenmail.util.GreenMail;
 import com.icegreen.greenmail.util.GreenMailUtil;
-import com.miniurl.config.TestEmailConfig;
 import jakarta.mail.internet.MimeMessage;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Import;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.test.context.ActiveProfiles;
@@ -26,8 +24,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
-@ActiveProfiles("dev")
-@Import(TestEmailConfig.class)
+@ActiveProfiles("test")
 @DisplayName("Email Integration Tests (GreenMail)")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class EmailIntegrationTest {

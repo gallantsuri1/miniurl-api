@@ -26,7 +26,7 @@ public class TestJwtUtil {
             "password", password
         );
 
-        MvcResult result = mockMvc.perform(post("/auth/login")
+        MvcResult result = mockMvc.perform(post("/api/auth/login")
                 .with(csrf())
                 .contentType("application/json")
                 .content(objectMapper.writeValueAsString(loginRequest)))
