@@ -60,6 +60,12 @@ public class UrlController {
                           "message": "URL must not contain spaces"
                         }
                         """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Self-referencing URL", value = """
+                        {
+                          "success": false,
+                          "message": "Shortening URLs for this domain is not allowed"
+                        }
+                        """),
                     @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Short alias", value = """
                         {
                           "success": false,

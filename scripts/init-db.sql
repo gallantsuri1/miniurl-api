@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS users (
     failed_login_attempts INT DEFAULT 0,
     lockout_time DATETIME,
     last_otp_sent_at DATETIME,
+    theme ENUM('LIGHT', 'DARK', 'OCEAN', 'FOREST') DEFAULT 'LIGHT',
     token_version INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

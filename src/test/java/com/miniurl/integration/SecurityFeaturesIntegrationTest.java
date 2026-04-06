@@ -17,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,6 +25,7 @@ import java.util.Map;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /**
@@ -375,5 +377,71 @@ class SecurityFeaturesIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(request)))
             .andExpect(status().isBadRequest());
+    }
+
+    // ==================== Profile Theme Tests ====================
+
+    @Test
+    @DisplayName("Get profile should return theme field")
+    void getProfile_shouldReturnTheme() throws Exception {
+        // Login first
+        Map<String, String> loginRequest = new HashMap<>();
+        loginRequest.put("username", testUser.getUsername());
+        loginRequest.put("password", "TestPass123!@#");
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(loginRequest)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        String token = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+            .get("data").get("token").asText();
+
+        // Get profile
+        mockMvc.perform(get("/api/profile")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.theme").value("LIGHT"));
+    }
+
+    @Test
+    @DisplayName("Update profile theme should succeed")
+    void updateProfile_theme_shouldSucceed() throws Exception {
+        // Login first
+        Map<String, String> loginRequest = new HashMap<>();
+        loginRequest.put("username", testUser.getUsername());
+        loginRequest.put("password", "TestPass123!@#");
+
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(loginRequest)))
+            .andExpect(status().isOk())
+            .andReturn();
+
+        String token = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+            .get("data").get("token").asText();
+
+        // Update theme only
+        Map<String, String> updateRequest = new HashMap<>();
+        updateRequest.put("theme", "DARK");
+
+        mockMvc.perform(put("/api/profile")
+                .with(csrf())
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(updateRequest)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data.theme").value("DARK"));
+
+        // Verify theme persists in GET profile
+        mockMvc.perform(get("/api/profile")
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.theme").value("DARK"));
     }
 }

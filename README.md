@@ -144,7 +144,7 @@ docker run -e SPRING_PROFILES_ACTIVE=prod miniurl/miniurl-api:latest
 
 | Field | Rule | Valid Examples | Invalid Examples |
 |-------|------|---------------|-----------------|
-| **url** | Required, max 2000 chars, no spaces | `https://example.com` | `https://example.com/some url`, (empty) |
+| **url** | Required, max 2000 chars, no spaces, no self-referencing | `https://example.com` | `https://url.suricloud.uk` (app's own domain) |
 | **alias** | Optional, 6-20 chars, alphanumeric only | `mylink`, `abc123`, `mycode2026` | `abc` (too short), `my-link` (special chars), `my link` (space) |
 
 ---

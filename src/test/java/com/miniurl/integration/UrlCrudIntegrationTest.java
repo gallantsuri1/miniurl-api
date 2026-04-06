@@ -188,6 +188,23 @@ class UrlCrudIntegrationTest {
     }
 
     @Test
+    @DisplayName("Create URL with self-referencing domain should return 400")
+    void createUrl_withSelfReferencingDomain_shouldReturnBadRequest() throws Exception {
+        // The test profile sets app.base-url to http://localhost:8080
+        // So shortening a localhost URL should be blocked
+        Map<String, String> request = new HashMap<>();
+        request.put("url", "http://localhost:8080/some/path");
+
+        mockMvc.perform(post("/api/urls")
+                .with(csrf())
+                .header("Authorization", "Bearer " + jwtToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(request)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Shortening URLs for this domain is not allowed"));
+    }
+
+    @Test
     @DisplayName("Create URL without authentication should return 401")
     void createUrlWithoutAuth_shouldReturnUnauthorized() throws Exception {
         // Arrange

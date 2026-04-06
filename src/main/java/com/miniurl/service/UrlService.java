@@ -53,6 +53,9 @@ public class UrlService {
     @Value("${app.base-url}")
     private String baseUrl;
 
+    @Value("${app.ui-base-url:http://localhost:3000}")
+    private String uiBaseUrl;
+
     public UrlService(UrlRepository urlRepository, UserRepository userRepository,
                       UrlUsageLimitService urlUsageLimitService) {
         this.urlRepository = urlRepository;
@@ -135,6 +138,11 @@ public class UrlService {
                 throw new UrlValidationException("Invalid URL: missing host");
             }
 
+            // Block self-referencing URLs (app's own domain) — check before generic blocked domains
+            if (isSelfReferencingUrl(host)) {
+                throw new UrlValidationException("Shortening URLs for this domain is not allowed");
+            }
+
             // Check against blocked domains
             if (BLOCKED_DOMAINS.contains(host.toLowerCase())) {
                 throw new UrlValidationException("URL host is not allowed");
@@ -156,6 +164,41 @@ public class UrlService {
         } catch (MalformedURLException e) {
             throw new UrlValidationException("Invalid URL format");
         }
+    }
+
+    /**
+     * Check if the host matches the app's own domain (self-referencing URL block).
+     * Compares normalized hosts (lowercase, stripped of port and www prefix).
+     */
+    private boolean isSelfReferencingUrl(String host) {
+        String normalizedHost = normalizeHost(host);
+        String normalizedBaseUrl = normalizeHost(extractHost(baseUrl));
+        String normalizedUiUrl = normalizeHost(extractHost(uiBaseUrl));
+
+        return (!normalizedBaseUrl.isEmpty() && normalizedHost.equals(normalizedBaseUrl)) ||
+               (!normalizedUiUrl.isEmpty() && normalizedHost.equals(normalizedUiUrl));
+    }
+
+    /**
+     * Extract host from a full URL string (e.g., "https://url.suricloud.uk:443/path" → "url.suricloud.uk")
+     */
+    private String extractHost(String urlString) {
+        try {
+            URL url = new URL(urlString);
+            return url.getHost();
+        } catch (MalformedURLException e) {
+            return "";
+        }
+    }
+
+    /**
+     * Normalize host: lowercase, strip www prefix.
+     */
+    private String normalizeHost(String host) {
+        if (host == null || host.isEmpty()) return "";
+        String h = host.toLowerCase().trim();
+        if (h.startsWith("www.")) h = h.substring(4);
+        return h;
     }
 
     /**

@@ -2,6 +2,7 @@ package com.miniurl.controller;
 
 import com.miniurl.dto.ApiResponse;
 import com.miniurl.dto.ProfileUpdateRequest;
+import com.miniurl.entity.Theme;
 import com.miniurl.entity.User;
 import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.exception.UnauthorizedException;
@@ -83,6 +84,7 @@ public class ProfileController {
             response.put("role", user.getRole() != null ? user.getRole().getName() : "USER");
             response.put("createdAt", user.getCreatedAt());
             response.put("lastLogin", user.getLastLogin());
+            response.put("theme", user.getTheme() != null ? user.getTheme() : Theme.LIGHT);
 
             return ResponseEntity.ok(ApiResponse.success("Profile retrieved", response));
         } catch (ResourceNotFoundException e) {
@@ -93,18 +95,28 @@ public class ProfileController {
     @PutMapping
     @Operation(
         summary = "Update user profile",
-        description = "Update the current authenticated user's profile information"
+        description = """
+            Update the current authenticated user's profile information.
+            All fields are optional — only provided fields will be updated.
+
+            **Theme values:** `LIGHT`, `DARK`, `OCEAN`, `FOREST`
+
+            **Examples:**
+            - Update theme only: `{ "theme": "DARK" }`
+            - Update name only: `{ "firstName": "John", "lastName": "Doe" }`
+            - Update all: `{ "firstName": "John", "lastName": "Doe", "email": "john@example.com", "theme": "OCEAN" }`
+            """
     )
     @ApiResponses(value = {
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile updated successfully",
             content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request or theme value"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized - invalid token"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Profile feature disabled"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
     })
     public ResponseEntity<ApiResponse> updateProfile(
-            @Parameter(description = "Profile update request", required = true)
+            @Parameter(description = "Profile update request (all fields optional)", required = true)
             @Valid @RequestBody ProfileUpdateRequest request,
             @Parameter(description = "JWT Bearer token", required = true)
             @RequestHeader("Authorization") String authHeader,
@@ -122,7 +134,8 @@ public class ProfileController {
                 user.getId(),
                 request.getFirstName(),
                 request.getLastName(),
-                request.getEmail()
+                request.getEmail(),
+                request.getTheme()
             );
 
             auditLogService.logAction(updatedUser, "PROFILE_UPDATE", "USER", updatedUser.getId(),
@@ -132,6 +145,7 @@ public class ProfileController {
             response.put("firstName", updatedUser.getFirstName());
             response.put("lastName", updatedUser.getLastName());
             response.put("email", updatedUser.getEmail());
+            response.put("theme", updatedUser.getTheme());
 
             return ResponseEntity.ok(ApiResponse.success("Profile updated successfully", response));
         } catch (UnauthorizedException e) {

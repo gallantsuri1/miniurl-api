@@ -2,6 +2,7 @@ package com.miniurl.service;
 
 import com.miniurl.entity.EmailInvite;
 import com.miniurl.entity.Role;
+import com.miniurl.entity.Theme;
 import com.miniurl.entity.User;
 import com.miniurl.entity.UserStatus;
 import com.miniurl.entity.VerificationToken;
@@ -419,19 +420,21 @@ public class AuthService {
      * Update user profile
      */
     @Transactional
-    public User updateProfile(Long userId, String firstName, String lastName, String email) {
+    public User updateProfile(Long userId, String firstName, String lastName, String email, Theme theme) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
-        // Check if new email is already taken by another user
-        if (!user.getEmail().equals(email) && userRepository.existsByEmail(email)) {
+        // Only update email if provided and changed
+        if (email != null && !user.getEmail().equals(email) && userRepository.existsByEmail(email)) {
             throw new UnauthorizedException("Email already in use");
         }
 
-        user.setFirstName(firstName);
-        user.setLastName(lastName);
-        user.setEmail(email);
-        
+        // Update only provided fields (partial update)
+        if (firstName != null) user.setFirstName(firstName);
+        if (lastName != null) user.setLastName(lastName);
+        if (email != null) user.setEmail(email);
+        if (theme != null) user.setTheme(theme);
+
         userRepository.save(user);
 
         logger.info("Profile updated for user: {}", user.getUsername());
