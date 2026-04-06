@@ -180,8 +180,6 @@ All API endpoints enforce strict input validation. Invalid requests return `400 
 | | lastName | Optional, max 100 chars, letters/spaces/hyphens/apostrophes only |
 | | email | Optional, valid email format, max 255 chars |
 | | theme | Optional, one of: LIGHT, DARK, OCEAN, FOREST |
-| **POST `/api/profile/change-password`** | oldPassword | Optional |
-| | newPassword | Required, 8-255 chars |
 
 #### URL Endpoints
 
@@ -200,7 +198,7 @@ All API endpoints enforce strict input validation. Invalid requests return `400 
 - **Invitation-Only Registration** - Admin sends email invites to users
 - **Role-Based Access Control** - ADMIN and USER roles
 - **Profile Management** - Update name, email, password
-- **Account Settings** - Export data (JSON), change password, delete account
+- **Account Settings** - Export data (JSON), reset password via email, delete account
 - **Admin Dashboard** - User management (activate, deactivate, suspend, change roles) via API
 - **Email Invitations** - Admin-only feature to invite users via email
 
@@ -1266,13 +1264,29 @@ Login endpoints use **dual-layer** rate limiting (per-IP + per-username) to prot
 | Endpoint | Per-IP Limit | Per-User Limit | Purpose |
 |----------|-------------|---------------|---------|
 | Login | 100 req / 15 min | 5 req / 5 min (username) | Brute force protection (works for non-existent users) |
-| Password Reset | 60 req / 1 hr | 3 req / 1 hr (email) | Prevents targeting specific accounts |
+| Password Reset | 60 req / 1 hr | 1 req / 20 min (email) | Prevents targeting specific accounts |
 | OTP Verify/Resend | 30 req / 15 min | 5 req / 5 min (email/username) | Brute-force protection per user |
 | Signup | 20 req / 1 hr | — | Spam prevention |
 | Email Verification | 50 req / 1 hr | — | Token validation abuse prevention |
 | URL Creation | 500 req / 1 hr | — | Fair usage |
 | General API | 1000 req / 1 hr | — | API abuse prevention |
 | Redirects | 5000 req / 1 hr | — | DDoS protection |
+
+**Rate Limit Responses (HTTP 429):**
+
+When a rate limit is exceeded, the API returns a `429 Too Many Requests` response with the exact cooldown time:
+
+```json
+{
+  "success": false,
+  "message": "Rate limit exceeded. Please try again in 298 seconds."
+}
+```
+
+**Headers included:**
+- `Retry-After`: Seconds until the rate limit resets
+- `X-RateLimit-Limit`: Maximum requests allowed
+- `X-RateLimit-Remaining`: Remaining requests (always `0` when rate limited)
 
 **How dual-layer login protection works:**
 ```

@@ -71,13 +71,14 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Handle rate limit cooldown errors (400 Bad Request)
+     * Handle rate limit cooldown errors (429 Too Many Requests)
      */
     @ExceptionHandler(RateLimitCooldownException.class)
     public ResponseEntity<ApiResponse> handleRateLimitCooldownException(RateLimitCooldownException ex) {
         logger.debug("Rate limit cooldown: {}", ex.getMessage());
         return ResponseEntity
-            .badRequest()
+            .status(HttpStatus.TOO_MANY_REQUESTS)
+            .header("Retry-After", "1")
             .body(ApiResponse.error(ex.getMessage()));
     }
 

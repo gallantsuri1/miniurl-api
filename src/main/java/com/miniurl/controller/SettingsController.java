@@ -1,7 +1,6 @@
 package com.miniurl.controller;
 
 import com.miniurl.dto.ApiResponse;
-import com.miniurl.dto.ChangePasswordRequest;
 import com.miniurl.dto.DeleteAccountRequest;
 import com.miniurl.entity.Url;
 import com.miniurl.entity.User;
@@ -55,47 +54,6 @@ public class SettingsController {
         this.jwtUtil = jwtUtil;
         this.auditLogService = auditLogService;
         this.featureFlagService = featureFlagService;
-    }
-
-    @PostMapping("/change-password")
-    @Operation(
-        summary = "Change password",
-        description = "Change the current user's password"
-    )
-    @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Password changed successfully",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid old password"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Settings feature disabled"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
-    })
-    public ResponseEntity<ApiResponse> changePassword(
-            @Parameter(description = "Password change request", required = true)
-            @Valid @RequestBody ChangePasswordRequest request,
-            @Parameter(description = "JWT Bearer token", required = true)
-            @RequestHeader("Authorization") String authHeader,
-            HttpServletRequest httpRequest) {
-        try {
-            // Authenticated users can access settings (no feature flag check needed)
-
-            String token = authHeader.substring(7);
-            String username = jwtUtil.extractUsername(token);
-
-            User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-            authService.changePassword(user.getId(), request.getOldPassword(), request.getNewPassword());
-
-            auditLogService.logAction(user, "PASSWORD_CHANGE", "USER", user.getId(),
-                "Password changed successfully", httpRequest);
-
-            return ResponseEntity.ok(ApiResponse.success("Password changed successfully"));
-        } catch (UnauthorizedException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(ApiResponse.error(e.getMessage()));
-        }
     }
 
     @GetMapping("/export")

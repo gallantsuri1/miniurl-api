@@ -26,9 +26,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
-
 @RestController
 @RequestMapping("/api/auth")
 @Tag(name = "Authentication", description = "Endpoints for user authentication and account management")
@@ -284,8 +281,8 @@ public class AuthController {
             Send password reset link to user's email.
 
             **Security:**
-            - Email bombing protection (max 3 requests per hour per email)
-            - IP-based rate limiting (max 60 requests per hour)
+            - Email bombing protection (max 1 request per 20 minutes per email)
+            - IP-based rate limiting (60 requests per hour)
             - Doesn't reveal if email exists (prevents enumeration)
             - Reset token expires in 15 minutes
 
@@ -296,7 +293,7 @@ public class AuthController {
             4. User clicks link to reset password
 
             **Rate Limits:**
-            - Per-email: 3 requests per hour
+            - Per-email: 1 request per 20 minutes
             - Per-IP: 60 requests per hour
             """
     )
@@ -318,7 +315,23 @@ public class AuthController {
                         """)
                 })),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid email format",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class)))
+            content = @Content(schema = @Schema(implementation = ApiResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limit exceeded — cooldown period active",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = {
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Email Rate Limited", value = """
+                        {
+                          "success": false,
+                          "message": "Password reset rate limit exceeded. Please try again in 19 minutes."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "IP Rate Limited", value = """
+                        {
+                          "success": false,
+                          "message": "Rate limit exceeded. Please try again in 3542 seconds."
+                        }
+                        """)
+                }))
     })
     public ResponseEntity<ApiResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         try {
@@ -461,7 +474,15 @@ public class AuthController {
                           "message": "Account temporarily locked due to too many failed attempts. Please try again in 5 minutes."
                         }
                         """)
-                }))
+                })),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limit exceeded",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Rate Limited", value = """
+                    {
+                      "success": false,
+                      "message": "Rate limit exceeded. Please try again in 298 seconds."
+                    }
+                    """)))
     })
     public ResponseEntity<ApiResponse> login(@Valid @RequestBody LoginRequest request) {
         try {
@@ -608,7 +629,15 @@ public class AuthController {
                           "message": "No OTP generated. Please login again."
                         }
                         """)
-                }))
+                })),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limit exceeded",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Rate Limited", value = """
+                    {
+                      "success": false,
+                      "message": "Rate limit exceeded. Please try again in 298 seconds."
+                    }
+                    """)))
     })
     public ResponseEntity<ApiResponse> verifyOtp(@Valid @RequestBody OtpVerificationRequest request) {
         try {
@@ -680,11 +709,21 @@ public class AuthController {
                           "success": false,
                           "message": "No OTP generated. Please login again."
                         }
-                        """),
+                        """)
+                })),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Rate limit exceeded — cooldown period active",
+            content = @Content(schema = @Schema(implementation = ApiResponse.class),
+                examples = {
                     @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Resend Cooldown", value = """
                         {
                           "success": false,
                           "message": "Please wait before requesting a new OTP."
+                        }
+                        """),
+                    @io.swagger.v3.oas.annotations.media.ExampleObject(name = "Rate Limited", value = """
+                        {
+                          "success": false,
+                          "message": "Rate limit exceeded. Please try again in 298 seconds."
                         }
                         """)
                 }))
@@ -696,7 +735,7 @@ public class AuthController {
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         } catch (com.miniurl.exception.RateLimitCooldownException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+            return ResponseEntity.status(429).header("Retry-After", "1").body(ApiResponse.error(e.getMessage()));
         }
     }
 
@@ -709,41 +748,6 @@ public class AuthController {
         int atIndex = email.indexOf('@');
         if (atIndex <= 1) return "***";
         return email.charAt(0) + "***" + email.charAt(atIndex - 1) + email.substring(atIndex);
-    }
-
-    @PostMapping("/change-password")
-    @Operation(
-        summary = "Change password",
-        description = "Change user password (requires authentication)"
-    )
-    @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Password changed successfully",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid old password"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
-    })
-    public ResponseEntity<ApiResponse> changePassword(
-            @Valid @RequestBody ChangePasswordRequest request,
-            @RequestHeader("Authorization") String authHeader) {
-        try {
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("Invalid authorization header"));
-            }
-
-            String token = authHeader.substring(7);
-            String username = jwtUtil.extractUsername(token);
-
-            User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-            authService.changePassword(user.getId(), request.getOldPassword(), request.getNewPassword());
-            return ResponseEntity.ok(ApiResponse.success("Password changed successfully"));
-        } catch (UnauthorizedException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(ApiResponse.error(e.getMessage()));
-        }
     }
 
     @PostMapping("/delete-account")
@@ -776,39 +780,6 @@ public class AuthController {
             return ResponseEntity.ok(ApiResponse.success("Account deleted successfully"));
         } catch (UnauthorizedException e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(ApiResponse.error(e.getMessage()));
-        }
-    }
-
-    @GetMapping("/check-password-change")
-    @Operation(
-        summary = "Check password change required",
-        description = "Check if user must change password (requires authentication)"
-    )
-    @ApiResponses(value = {
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Password change status retrieved",
-            content = @Content(schema = @Schema(implementation = ApiResponse.class))),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Unauthorized"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
-    })
-    public ResponseEntity<ApiResponse> checkPasswordChange(
-            @RequestHeader("Authorization") String authHeader) {
-        try {
-            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-                return ResponseEntity.badRequest().body(ApiResponse.error("Invalid authorization header"));
-            }
-
-            String token = authHeader.substring(7);
-            String username = jwtUtil.extractUsername(token);
-
-            User user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("mustChangePassword", user.isMustChangePassword());
-
-            return ResponseEntity.ok(ApiResponse.success("Password change status retrieved", response));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(ApiResponse.error(e.getMessage()));
         }

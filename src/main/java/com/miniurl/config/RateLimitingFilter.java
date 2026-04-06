@@ -3,6 +3,7 @@ package com.miniurl.config;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.bucket4j.Bucket;
+import io.github.bucket4j.ConsumptionProbe;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ReadListener;
 import jakarta.servlet.ServletException;
@@ -77,22 +78,33 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             Bucket ipBucket = rateLimitConfig.getLoginBucket(clientIp);
             Bucket userBucket = username != null ? rateLimitConfig.getLoginByUsernameBucket(username) : null;
 
-            boolean ipAllowed = ipBucket.tryConsume(1);
-            boolean userAllowed = userBucket == null || userBucket.tryConsume(1);
+            ConsumptionProbe ipProbe = ipBucket.tryConsumeAndReturnRemaining(1);
+            ConsumptionProbe userProbe = userBucket != null ? userBucket.tryConsumeAndReturnRemaining(1) : null;
 
-            if (!ipAllowed || !userAllowed) {
-                String reason = !userAllowed
-                    ? "Rate limit exceeded for username: " + username
-                    : "Rate limit exceeded for IP: " + clientIp;
-                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, reason);
+            if (!ipProbe.isConsumed() || (userProbe != null && !userProbe.isConsumed())) {
+                long retryAfterSeconds;
+                String target;
+                if (userProbe != null && !userProbe.isConsumed()) {
+                    retryAfterSeconds = (long) Math.ceil(userProbe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                    target = "username: " + username;
+                } else {
+                    retryAfterSeconds = (long) Math.ceil(ipProbe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                    target = "IP: " + clientIp;
+                }
+                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, target);
+
+                String message = String.format(
+                    "Rate limit exceeded. Please try again in %d %s.",
+                    retryAfterSeconds, retryAfterSeconds == 1 ? "second" : "seconds"
+                );
 
                 response.setStatus(429);
                 response.setContentType("application/json");
                 response.setHeader("X-RateLimit-Limit", "1");
                 response.setHeader("X-RateLimit-Remaining", "0");
-                response.setHeader("Retry-After", "300");
+                response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
                 response.getWriter().write(
-                    "{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}"
+                    "{\"success\":false,\"message\":\"" + message.replace("\"", "\\\"") + "\"}"
                 );
                 return;
             }
@@ -109,22 +121,33 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             Bucket ipBucket = rateLimitConfig.getPasswordResetBucket(clientIp);
             Bucket emailBucket = email != null ? rateLimitConfig.getPasswordResetByEmailBucket(email) : null;
 
-            boolean ipAllowed = ipBucket.tryConsume(1);
-            boolean emailAllowed = emailBucket == null || emailBucket.tryConsume(1);
+            ConsumptionProbe ipProbe = ipBucket.tryConsumeAndReturnRemaining(1);
+            ConsumptionProbe emailProbe = emailBucket != null ? emailBucket.tryConsumeAndReturnRemaining(1) : null;
 
-            if (!ipAllowed || !emailAllowed) {
-                String reason = !emailAllowed
-                    ? "Rate limit exceeded for email: " + email
-                    : "Rate limit exceeded for IP: " + clientIp;
-                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, reason);
+            if (!ipProbe.isConsumed() || (emailProbe != null && !emailProbe.isConsumed())) {
+                long retryAfterSeconds;
+                String target;
+                if (emailProbe != null && !emailProbe.isConsumed()) {
+                    retryAfterSeconds = (long) Math.ceil(emailProbe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                    target = "email: " + email;
+                } else {
+                    retryAfterSeconds = (long) Math.ceil(ipProbe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                    target = "IP: " + clientIp;
+                }
+                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, target);
+
+                String message = String.format(
+                    "Rate limit exceeded. Please try again in %d %s.",
+                    retryAfterSeconds, retryAfterSeconds == 1 ? "second" : "seconds"
+                );
 
                 response.setStatus(429);
                 response.setContentType("application/json");
                 response.setHeader("X-RateLimit-Limit", "1");
                 response.setHeader("X-RateLimit-Remaining", "0");
-                response.setHeader("Retry-After", "3600");
+                response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
                 response.getWriter().write(
-                    "{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}"
+                    "{\"success\":false,\"message\":\"" + message.replace("\"", "\\\"") + "\"}"
                 );
                 return;
             }
@@ -145,22 +168,33 @@ public class RateLimitingFilter extends OncePerRequestFilter {
             Bucket ipBucket = rateLimitConfig.getOtpBucket(clientIp);
             Bucket idBucket = identifier != null ? rateLimitConfig.getOtpByEmailBucket(identifier) : null;
 
-            boolean ipAllowed = ipBucket.tryConsume(1);
-            boolean idAllowed = idBucket == null || idBucket.tryConsume(1);
+            ConsumptionProbe ipProbe = ipBucket.tryConsumeAndReturnRemaining(1);
+            ConsumptionProbe idProbe = idBucket != null ? idBucket.tryConsumeAndReturnRemaining(1) : null;
 
-            if (!ipAllowed || !idAllowed) {
-                String reason = !idAllowed
-                    ? "Rate limit exceeded for: " + identifier
-                    : "Rate limit exceeded for IP: " + clientIp;
-                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, reason);
+            if (!ipProbe.isConsumed() || (idProbe != null && !idProbe.isConsumed())) {
+                long retryAfterSeconds;
+                String target;
+                if (idProbe != null && !idProbe.isConsumed()) {
+                    retryAfterSeconds = (long) Math.ceil(idProbe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                    target = "identifier: " + identifier;
+                } else {
+                    retryAfterSeconds = (long) Math.ceil(ipProbe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                    target = "IP: " + clientIp;
+                }
+                logger.warn("Rate limit exceeded on path: {} | {}", requestURI, target);
+
+                String message = String.format(
+                    "Rate limit exceeded. Please try again in %d %s.",
+                    retryAfterSeconds, retryAfterSeconds == 1 ? "second" : "seconds"
+                );
 
                 response.setStatus(429);
                 response.setContentType("application/json");
                 response.setHeader("X-RateLimit-Limit", "1");
                 response.setHeader("X-RateLimit-Remaining", "0");
-                response.setHeader("Retry-After", "300");
+                response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
                 response.getWriter().write(
-                    "{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}"
+                    "{\"success\":false,\"message\":\"" + message.replace("\"", "\\\"") + "\"}"
                 );
                 return;
             }
@@ -172,18 +206,27 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         // For all other endpoints: per-IP rate limiting only
         Bucket bucket = getBucketForPath(requestURI, clientIp);
 
-        if (bucket != null && !bucket.tryConsume(1)) {
-            logger.warn("Rate limit exceeded for IP: {} on path: {}", clientIp, requestURI);
+        if (bucket != null) {
+            ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+            if (!probe.isConsumed()) {
+                long retryAfterSeconds = (long) Math.ceil(probe.getNanosToWaitForRefill() / 1_000_000_000.0);
+                logger.warn("Rate limit exceeded for IP: {} on path: {}", clientIp, requestURI);
 
-            response.setStatus(429);
-            response.setContentType("application/json");
-            response.setHeader("X-RateLimit-Limit", "1");
-            response.setHeader("X-RateLimit-Remaining", "0");
-            response.setHeader("Retry-After", "60");
-            response.getWriter().write(
-                "{\"success\":false,\"message\":\"Too many requests. Please try again later.\"}"
-            );
-            return;
+                String message = String.format(
+                    "Rate limit exceeded. Please try again in %d %s.",
+                    retryAfterSeconds, retryAfterSeconds == 1 ? "second" : "seconds"
+                );
+
+                response.setStatus(429);
+                response.setContentType("application/json");
+                response.setHeader("X-RateLimit-Limit", "1");
+                response.setHeader("X-RateLimit-Remaining", "0");
+                response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
+                response.getWriter().write(
+                    "{\"success\":false,\"message\":\"" + message.replace("\"", "\\\"") + "\"}"
+                );
+                return;
+            }
         }
 
         filterChain.doFilter(request, response);

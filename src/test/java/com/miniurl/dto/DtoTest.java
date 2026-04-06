@@ -192,26 +192,12 @@ class DtoTest {
     }
 
     @Test
-    @DisplayName("ChangePasswordRequest - all constructors and methods")
-    void changePasswordRequest() {
-        ChangePasswordRequest request = new ChangePasswordRequest();
-        request.setOldPassword("old");
-        request.setNewPassword("new");
-        
-        assertEquals("old", request.getOldPassword());
-        assertEquals("new", request.getNewPassword());
-        
-        request = new ChangePasswordRequest("old2", "new2");
-        assertEquals("old2", request.getOldPassword());
-    }
-
-    @Test
     @DisplayName("DeleteAccountRequest - all constructors and methods")
     void deleteAccountRequest() {
         DeleteAccountRequest request = new DeleteAccountRequest();
         request.setPassword("pass");
         assertEquals("pass", request.getPassword());
-        
+
         request = new DeleteAccountRequest("pass2");
         assertEquals("pass2", request.getPassword());
     }

@@ -305,12 +305,14 @@ public class AuthService {
      */
     @Transactional
     public void requestPasswordReset(String email) {
-        // Email bombing protection - max 3 requests per hour
+        // Email bombing protection - max 1 request per 20 minutes
         LocalDateTime lastRequest = passwordResetRequests.get(email.toLowerCase());
         if (lastRequest != null && LocalDateTime.now().isBefore(lastRequest.plusMinutes(20))) {
-            logger.warn("Password reset rate limit exceeded for: {}", email);
-            // Return silently to avoid revealing if email exists or rate limit hit
-            return;
+            long minutesLeft = java.time.Duration.between(LocalDateTime.now(), lastRequest.plusMinutes(20)).toMinutes() + 1;
+            throw new RateLimitCooldownException(
+                String.format("Password reset rate limit exceeded. Please try again in %d %s.",
+                    minutesLeft, minutesLeft == 1 ? "minute" : "minutes")
+            );
         }
         
         User user = userRepository.findByEmail(email)
@@ -365,33 +367,6 @@ public class AuthService {
         emailService.sendPasswordResetConfirmationEmail(user.getEmail(), user.getUsername());
 
         logger.info("Password reset for user: {}", user.getUsername());
-    }
-
-    /**
-     * Change user password
-     */
-    @Transactional
-    public void changePassword(Long userId, String oldPassword, String newPassword) {
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new ResourceNotFoundException("User not found"));
-
-        // Verify old password (if not first-time change)
-        if (!user.isMustChangePassword() && !passwordEncoder.matches(oldPassword, user.getPassword())) {
-            throw new UnauthorizedException("Current password is incorrect");
-        }
-
-        // Validate new password strength
-        validatePasswordStrength(newPassword, user.getUsername());
-
-        user.setPassword(passwordEncoder.encode(newPassword));
-        user.setMustChangePassword(false);
-        user.incrementTokenVersion();  // Invalidate all existing tokens
-        userRepository.save(user);
-
-        // Send password change notification email
-        emailService.sendPasswordChangeNotificationEmail(user.getEmail(), user.getUsername());
-
-        logger.info("Password changed successfully for user: {}", user.getUsername());
     }
 
     /**
