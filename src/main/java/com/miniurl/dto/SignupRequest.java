@@ -11,13 +11,13 @@ public class SignupRequest {
     @NotBlank(message = "First name is required")
     @Size(min = 1, max = 100, message = "First name must be between 1 and 100 characters")
     @Pattern(regexp = "^[\\p{L}\\s'\\-]+$", message = "First name may only contain letters, spaces, hyphens, and apostrophes")
-    @Schema(description = "User's first name", example = "John")
+    @Schema(description = "User's first name (1-100 chars, letters/spaces/hyphens/apostrophes only)", example = "John")
     private String firstName;
 
     @NotBlank(message = "Last name is required")
     @Size(min = 1, max = 100, message = "Last name must be between 1 and 100 characters")
     @Pattern(regexp = "^[\\p{L}\\s'\\-]+$", message = "Last name may only contain letters, spaces, hyphens, and apostrophes")
-    @Schema(description = "User's last name", example = "Doe")
+    @Schema(description = "User's last name (1-100 chars, letters/spaces/hyphens/apostrophes only)", example = "Doe")
     private String lastName;
 
     @NotBlank(message = "Username is required")
@@ -27,13 +27,14 @@ public class SignupRequest {
     private String username;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
+    @Size(min = 8, max = 255, message = "Password must be between 8 and 255 characters")
     @Schema(description = "User's password (min 8 characters, no complexity requirements)",
             example = "MyP@ssw0rd",
             minLength = 8)
     private String password;
 
     @NotBlank(message = "Invitation token is required")
+    @Size(max = 255, message = "Invitation token must be 255 characters or less")
     @Schema(description = "Invitation token from the email invite link",
             example = "aB3dE5fG7hI9jK1lM3nO5pQ7rS9tU1vW3xY5zA7bC9dE1fG3hI5jK7lM9nO1pQ",
             required = true)

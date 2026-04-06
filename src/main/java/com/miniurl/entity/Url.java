@@ -1,21 +1,27 @@
 package com.miniurl.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "urls", 
+@Table(name = "urls",
        indexes = @Index(name = "idx_short_code", columnList = "shortCode"),
        uniqueConstraints = @UniqueConstraint(columnNames = "short_code"))
 public class Url {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-    
+
+    @NotBlank(message = "Original URL is required")
+    @Size(max = 2048, message = "Original URL must be 2048 characters or less")
     @Column(nullable = false, length = 2048)
     private String originalUrl;
-    
+
+    @NotBlank(message = "Short code is required")
+    @Size(max = 10, message = "Short code must be 10 characters or less")
     @Column(nullable = false, length = 10)
     private String shortCode;
     

@@ -1,6 +1,8 @@
 package com.miniurl.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 @Entity
@@ -15,9 +17,12 @@ public class AuditLog {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @NotBlank(message = "Action is required")
+    @Size(max = 100, message = "Action must be 100 characters or less")
     @Column(nullable = false, length = 100)
     private String action;
 
+    @Size(max = 50, message = "Entity type must be 50 characters or less")
     @Column(name = "entity_type", length = 50)
     private String entityType;
 
@@ -27,10 +32,12 @@ public class AuditLog {
     @Column(columnDefinition = "TEXT")
     private String details;
 
+    @Size(max = 45, message = "IP address must be 45 characters or less")
     @Column(name = "ip_address", length = 45)
     private String ipAddress;
 
-    @Column(name = "user_agent", length = 255)
+    @Size(max = 512, message = "User agent must be 512 characters or less")
+    @Column(name = "user_agent", length = 512)
     private String userAgent;
 
     @Column(name = "created_at", nullable = false, updatable = false)

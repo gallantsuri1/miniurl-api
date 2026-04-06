@@ -26,6 +26,11 @@ public class AuditLogService {
         String ipAddress = getClientIp(request);
         String userAgent = request.getHeader("User-Agent");
 
+        // Truncate user agent to fit database column (VARCHAR(512))
+        if (userAgent != null && userAgent.length() > 512) {
+            userAgent = userAgent.substring(0, 512);
+        }
+
         AuditLog auditLog = AuditLog.builder()
             .user(user)
             .action(action)

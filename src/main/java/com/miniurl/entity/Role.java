@@ -1,6 +1,8 @@
 package com.miniurl.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,9 +13,12 @@ public class Role {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Role name is required")
+    @Size(max = 50, message = "Role name must be 50 characters or less")
     @Column(nullable = false, unique = true, length = 50)
     private String name;
 
+    @Size(max = 255, message = "Description must be 255 characters or less")
     @Column(length = 255)
     private String description;
 

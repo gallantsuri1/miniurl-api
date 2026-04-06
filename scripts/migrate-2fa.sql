@@ -59,3 +59,21 @@ WHERE f.feature_key = 'TWO_FACTOR_AUTH'
   AND NOT EXISTS (
       SELECT 1 FROM global_flags gf WHERE gf.feature_id = f.id
   );
+
+-- 5. Increase audit_logs.user_agent from VARCHAR(255) to VARCHAR(512)
+-- (real browser user agents often exceed 255 characters)
+SET @ua_col_exists = (
+    SELECT COUNT(*) FROM information_schema.columns
+    WHERE table_schema = 'miniurldb'
+      AND table_name = 'audit_logs'
+      AND column_name = 'user_agent'
+);
+
+SET @ua_sql = IF(@ua_col_exists > 0,
+    'ALTER TABLE audit_logs MODIFY COLUMN user_agent VARCHAR(512)',
+    'SELECT ''Column user_agent does not exist yet - skipping'''
+);
+
+PREPARE ua_stmt FROM @ua_sql;
+EXECUTE ua_stmt;
+DEALLOCATE PREPARE ua_stmt;

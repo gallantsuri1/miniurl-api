@@ -1,5 +1,6 @@
 package com.miniurl.config;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import com.miniurl.dto.ApiResponse;
 import com.miniurl.exception.RateLimitCooldownException;
 import com.miniurl.exception.ResourceNotFoundException;
@@ -119,7 +120,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UrlLimitExceededException.class)
     public ResponseEntity<ApiResponse> handleUrlLimitExceededException(UrlLimitExceededException ex) {
         logger.warn("URL limit exceeded: {} - {}", ex.getLimitType(), ex.getMessage());
-        
+
         ApiResponse response = ApiResponse.builder()
             .success(false)
             .message(ex.getMessage())
@@ -131,10 +132,22 @@ public class GlobalExceptionHandler {
                 "retryAfter", ex.getRetryAfter()
             ))
             .build();
-        
+
         return ResponseEntity
             .status(HttpStatus.TOO_MANY_REQUESTS)
             .body(response);
+    }
+
+    /**
+     * Handle data integrity violation errors (400 Bad Request)
+     * Covers database constraint violations (e.g., DataTruncation, unique constraint, foreign key)
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        logger.error("Data integrity violation: {}", ex.getMessage());
+        return ResponseEntity
+            .badRequest()
+            .body(ApiResponse.error("Invalid data provided. Please check your input and try again."));
     }
 
     /**

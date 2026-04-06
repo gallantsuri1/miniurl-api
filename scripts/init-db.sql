@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     entity_id BIGINT,
     details TEXT,
     ip_address VARCHAR(45),
-    user_agent VARCHAR(255),
+    user_agent VARCHAR(512),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_user_id (user_id),

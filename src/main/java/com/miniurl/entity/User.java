@@ -1,6 +1,9 @@
 package com.miniurl.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 @Entity
@@ -11,18 +14,26 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Size(max = 100, message = "First name must be 100 characters or less")
     @Column(nullable = false, length = 100)
     private String firstName;
 
+    @Size(max = 100, message = "Last name must be 100 characters or less")
     @Column(nullable = false, length = 100)
     private String lastName;
 
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email must be valid")
+    @Size(max = 255, message = "Email must be 255 characters or less")
     @Column(nullable = false, unique = true, length = 255)
     private String email;
 
+    @NotBlank(message = "Username is required")
+    @Size(max = 255, message = "Username must be 255 characters or less")
     @Column(nullable = false, unique = true, length = 255)
     private String username;
 
+    @NotBlank(message = "Password is required")
     @Column(nullable = false)
     private String password;
 
@@ -30,6 +41,7 @@ public class User {
     @JoinColumn(name = "role_id", nullable = false)
     private Role role;
 
+    @Size(max = 6, message = "OTP code must be 6 characters or less")
     @Column(name = "otp_code", length = 6)
     private String otpCode;
 

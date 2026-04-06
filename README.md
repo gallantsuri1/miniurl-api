@@ -145,7 +145,54 @@ docker run -e SPRING_PROFILES_ACTIVE=prod miniurl/miniurl-api:latest
 | Field | Rule | Valid Examples | Invalid Examples |
 |-------|------|---------------|-----------------|
 | **url** | Required, max 2000 chars, no spaces, no self-referencing | `https://example.com` | `https://url.suricloud.uk` (app's own domain) |
-| **alias** | Optional, 6-20 chars, alphanumeric only | `mylink`, `abc123`, `mycode2026` | `abc` (too short), `my-link` (special chars), `my link` (space) |
+| **alias** | Optional, 3-10 chars, alphanumeric only | `abc`, `mylink`, `url2026` | `ab` (too short), `mylink12345` (too long), `my-link` (special chars), `my link` (space) |
+
+---
+
+### API Input Validation
+
+All API endpoints enforce strict input validation. Invalid requests return `400 Bad Request` with descriptive error messages.
+
+#### Authentication Endpoints
+
+| Endpoint | Field | Constraints |
+|----------|-------|-------------|
+| **POST `/api/auth/signup`** | firstName | Required, 1-100 chars, letters/spaces/hyphens/apostrophes only |
+| | lastName | Required, 1-100 chars, letters/spaces/hyphens/apostrophes only |
+| | username | Required, 3-50 chars, starts with letter, alphanumeric + underscore |
+| | password | Required, 8-255 chars |
+| | invitationToken | Required, max 255 chars |
+| **POST `/api/auth/login`** | username | Required, max 255 chars |
+| | password | Required, max 255 chars |
+| **POST `/api/auth/verify-otp`** | username | Required, max 255 chars |
+| | otp | Required, exactly 6 digits (0-9) |
+| **POST `/api/auth/resend-otp`** | username | Required, max 255 chars |
+| **POST `/api/auth/forgot-password`** | email | Required, valid email format, max 255 chars |
+| **POST `/api/auth/reset-password`** | token | Required, max 255 chars |
+| | newPassword | Required, 8-255 chars |
+| **POST `/api/auth/delete-account`** | password | Required, min 8 chars |
+
+#### Profile Endpoints
+
+| Endpoint | Field | Constraints |
+|----------|-------|-------------|
+| **PUT `/api/profile`** | firstName | Optional, max 100 chars, letters/spaces/hyphens/apostrophes only |
+| | lastName | Optional, max 100 chars, letters/spaces/hyphens/apostrophes only |
+| | email | Optional, valid email format, max 255 chars |
+| | theme | Optional, one of: LIGHT, DARK, OCEAN, FOREST |
+| **POST `/api/profile/change-password`** | oldPassword | Optional |
+| | newPassword | Required, 8-255 chars |
+
+#### URL Endpoints
+
+| Endpoint | Field | Constraints |
+|----------|-------|-------------|
+| **POST `/api/urls`** | url | Required, max 2000 chars, no spaces, http/https only |
+| | alias | Optional, 3-10 chars, alphanumeric only |
+| **GET `/api/urls`** | page | Optional, min 0 (default: 0) |
+| | size | Optional, 1-100 (default: 10) |
+| | sortBy | Optional, one of: id, originalUrl, shortCode, accessCount, createdAt |
+| | sortDirection | Optional, asc or desc (default: desc) |
 
 ---
 

@@ -144,11 +144,11 @@ class UrlCrudIntegrationTest {
     }
 
     @Test
-    @DisplayName("Create URL with short alias (less than 6 chars) should return 400")
+    @DisplayName("Create URL with short alias (less than 3 chars) should return 400")
     void createUrl_withShortAlias_shouldReturnBadRequest() throws Exception {
         Map<String, String> request = new HashMap<>();
         request.put("url", "https://www.example.com");
-        request.put("alias", "abc");
+        request.put("alias", "ab");
 
         mockMvc.perform(post("/api/urls")
                 .with(csrf())

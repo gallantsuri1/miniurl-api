@@ -1,6 +1,8 @@
 package com.miniurl.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 @Entity
@@ -15,9 +17,13 @@ public class VerificationToken {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @NotBlank(message = "Token is required")
+    @Size(max = 255, message = "Token must be 255 characters or less")
     @Column(nullable = false, unique = true, length = 255)
     private String token;
 
+    @NotBlank(message = "Token type is required")
+    @Size(max = 50, message = "Token type must be 50 characters or less")
     @Column(name = "token_type", nullable = false, length = 50)
     private String tokenType; // EMAIL_VERIFICATION, PASSWORD_RESET
 

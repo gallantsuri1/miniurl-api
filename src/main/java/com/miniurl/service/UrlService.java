@@ -227,8 +227,12 @@ public class UrlService {
             return;
         }
 
-        if (alias.length() < 6) {
-            throw new UrlValidationException("Alias must be at least 6 characters");
+        if (alias.length() < 3) {
+            throw new UrlValidationException("Alias must be at least 3 characters");
+        }
+
+        if (alias.length() > 10) {
+            throw new UrlValidationException("Alias must be 10 characters or less");
         }
 
         if (!alias.matches("^[a-zA-Z0-9]+$")) {

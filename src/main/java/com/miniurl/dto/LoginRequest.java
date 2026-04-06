@@ -1,13 +1,20 @@
 package com.miniurl.dto;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
+@Schema(description = "User login request")
 public class LoginRequest {
-    
+
     @NotBlank(message = "Username is required")
+    @Size(max = 255, message = "Username must be 255 characters or less")
+    @Schema(description = "Username or email (max 255 chars)", example = "johndoe")
     private String username;
-    
+
     @NotBlank(message = "Password is required")
+    @Size(max = 255, message = "Password must be 255 characters or less")
+    @Schema(description = "User password (max 255 chars)", example = "MyP@ssw0rd")
     private String password;
     
     public LoginRequest() {}

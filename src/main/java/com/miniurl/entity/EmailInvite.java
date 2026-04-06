@@ -1,6 +1,9 @@
 package com.miniurl.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
 /**
@@ -15,9 +18,14 @@ public class EmailInvite {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotBlank(message = "Email is required")
+    @Email(message = "Email must be valid")
+    @Size(max = 255, message = "Email must be 255 characters or less")
     @Column(name = "email", nullable = false, length = 255)
     private String email;
 
+    @NotBlank(message = "Token is required")
+    @Size(max = 255, message = "Token must be 255 characters or less")
     @Column(name = "token", nullable = false, length = 255, unique = true)
     private String token;
 
@@ -25,6 +33,7 @@ public class EmailInvite {
     @Enumerated(EnumType.STRING)
     private InviteStatus status;
 
+    @Size(max = 100, message = "Invited by must be 100 characters or less")
     @Column(name = "invited_by", length = 100)
     private String invitedBy;
 
