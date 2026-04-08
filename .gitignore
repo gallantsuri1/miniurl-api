@@ -1,0 +1,33 @@
+# Build
+target/
+*.log
+.mvn/
+mvnw
+mvnw.cmd
+
+# Database
+*.db
+*.mv.db
+*.trace.db
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.qwen/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Terraform
+*.tfstate
+*.tfstate.lock
+*.tfvars
