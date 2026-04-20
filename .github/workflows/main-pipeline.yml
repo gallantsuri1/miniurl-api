@@ -1,0 +1,237 @@
+name: Main Pipeline - Build, Test, Docker & Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - 'README.md'
+      - 'SETUP_GUIDE.md'
+      - '.github/workflows/pr-validation.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-test:
+    name: Build and Run Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run Maven Build & Unit Tests
+        run: |
+          mvn clean test -DskipITs -B --no-transfer-progress
+
+      - name: Run Integration Tests
+        run: |
+          mvn verify -Pintegration-test -B --no-transfer-progress
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+          retention-days: 7
+
+  build-and-push-docker:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+            type=raw,value=${{ github.ref_name }}
+
+      - name: Build and push Docker images for all services
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            VCS_REF=${{ github.sha }}
+
+      - name: Create deployment manifest
+        run: |
+          echo "Docker images built and pushed successfully"
+          echo "SHA: ${{ github.sha }}"
+          echo "Tag: latest"
+
+  deploy-to-kubernetes:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push-docker
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+
+      - name: Configure Kubernetes cluster
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
+          kubectl config use-context ${{ secrets.KUBE_CONTEXT }}
+
+      - name: Update image tags in K8s manifests
+        run: |
+          # Update all service manifests with the new SHA tag
+          SHA=${{ github.sha }}
+          
+          # Update api-gateway
+          sed -i "s|miniurl/api-gateway:.*|miniurl/api-gateway:${SHA}|g" k8s/services/api-gateway.yaml
+          
+          # Update eureka-server
+          sed -i "s|miniurl/eureka-server:.*|miniurl/eureka-server:${SHA}|g" k8s/services/eureka-server.yaml
+          
+          # Update identity-service
+          sed -i "s|miniurl/identity-service:.*|miniurl/identity-service:${SHA}|g" k8s/services/identity-service.yaml
+          
+          # Update url-service
+          sed -i "s|miniurl/url-service:.*|miniurl/url-service:${SHA}|g" k8s/services/url-service.yaml
+          
+          # Update redirect-service
+          sed -i "s|miniurl/redirect-service:.*|miniurl/redirect-service:${SHA}|g" k8s/services/redirect-service.yaml
+          
+          # Update feature-service
+          sed -i "s|miniurl/feature-service:.*|miniurl/feature-service:${SHA}|g" k8s/services/feature-service.yaml
+          
+          # Update notification-service
+          sed -i "s|miniurl/notification-service:.*|miniurl/notification-service:${SHA}|g" k8s/services/notification-service.yaml
+          
+          # Update analytics-service
+          sed -i "s|miniurl/analytics-service:.*|miniurl/analytics-service:${SHA}|g" k8s/services/analytics-service.yaml
+
+      - name: Apply Kubernetes manifests
+        run: |
+          # Apply infrastructure first (namespace, configmaps, secrets)
+          kubectl apply -f k8s/infrastructure/
+          
+          # Wait for namespace to be ready
+          kubectl wait --for=condition=ready namespace/miniurl --timeout=60s
+          
+          # Apply services
+          kubectl apply -f k8s/services/
+          
+          # Apply HPA
+          kubectl apply -f k8s/hpa/
+
+      - name: Verify deployment
+        run: |
+          kubectl -n miniurl rollout status deployment/api-gateway --timeout=120s
+          kubectl -n miniurl rollout status deployment/eureka-server --timeout=120s
+          kubectl -n miniurl rollout status deployment/identity-service --timeout=120s
+          kubectl -n miniurl rollout status deployment/url-service --timeout=120s
+          kubectl -n miniurl rollout status deployment/redirect-service --timeout=120s
+          kubectl -n miniurl rollout status deployment/feature-service --timeout=120s
+          kubectl -n miniurl rollout status deployment/notification-service --timeout=120s
+          kubectl -n miniurl rollout status deployment/analytics-service --timeout=120s
+
+      - name: Notify deployment success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "🚀 Deployment successful!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*MyURL Deployment Successful* :tada:\n\n*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Environment:* Production"
+                  }
+                }
+              ]
+            }
+
+      - name: Notify deployment failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ Deployment failed!",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*MyURL Deployment Failed* :x:\n\n*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Environment:* Production\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
+                  }
+                }
+              ]
+            }
