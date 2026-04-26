@@ -1,5 +1,6 @@
 server:
   port: 8081
+  worker-id: ${SERVER_WORKER_ID:0}
 
 spring:
   application:
@@ -31,14 +32,11 @@ app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
   ui-base-url: ${APP_UI_BASE_URL:http://localhost:3000}
 
-server:
-  worker-id: ${SERVER_WORKER_ID:0}
-
 management:
-endpoints:
-  web:
-    exposure:
-      include: health,info,prometheus
-endpoint:
-  health:
-    show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
