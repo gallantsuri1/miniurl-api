@@ -26,6 +26,8 @@
         <spring-cloud.version>2023.0.0</spring-cloud.version>
         <otel.version>1.32.0</otel.version>
         <lombok.version>1.18.38</lombok.version>
+        <byte-buddy.version>1.17.2</byte-buddy.version>
+        <mockito.version>5.17.0</mockito.version>
     </properties>
 
     <modules>
