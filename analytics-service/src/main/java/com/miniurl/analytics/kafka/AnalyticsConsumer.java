@@ -15,7 +15,7 @@ public class AnalyticsConsumer {
 
     private final ClickEventRepository clickEventRepository;
 
-    @KafkaListener(topics = "clicks", groupId = "analytics-group")
+    @KafkaListener(topics = "click-events", groupId = "analytics-group")
     @Transactional
     public void consume(ClickEvent event) {
         log.info("Received click event for shortCode: {}", event.getShortCode());
