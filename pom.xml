@@ -28,6 +28,7 @@
     </properties>
 
     <modules>
+        <module>common</module>
         <module>api-gateway</module>
         <module>identity-service</module>
         <module>url-service</module>

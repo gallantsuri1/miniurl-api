@@ -1,10 +1,13 @@
 package com.miniurl.identity.entity;
 
+import com.miniurl.enums.Theme;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
+import java.util.Collection;
+import java.util.Collections;
 
 @Entity
 @Table(name = "users")
@@ -191,6 +194,14 @@ public class User {
      */
     public boolean isLockoutExpired() {
         return lockoutTime != null && lockoutTime.isBefore(LocalDateTime.now());
+    }
+
+    /**
+     * Check if the account is eligible for a login attempt.
+     * Returns false if the account is currently locked.
+     */
+    public boolean isLoginAttemptAllowed() {
+        return !isAccountLocked();
     }
 
     /**

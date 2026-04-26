@@ -3,7 +3,7 @@ package com.miniurl.identity.service;
 import com.miniurl.dto.NotificationEvent;
 import com.miniurl.identity.entity.EmailInvite;
 import com.miniurl.identity.entity.Role;
-import com.miniurl.identity.entity.Theme;
+import com.miniurl.enums.Theme;
 import com.miniurl.identity.entity.User;
 import com.miniurl.identity.entity.UserStatus;
 import com.miniurl.identity.entity.VerificationToken;

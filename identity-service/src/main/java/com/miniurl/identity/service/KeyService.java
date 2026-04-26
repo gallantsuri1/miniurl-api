@@ -3,11 +3,12 @@ package com.miniurl.identity.service;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+import com.nimbusds.jose.jwk.KeyUse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -17,8 +18,6 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Service for managing RSA key pairs for RS256 JWT signing.
@@ -31,7 +30,6 @@ public class KeyService {
     private static final String PUBLIC_KEY_FILE = "public_key.pem";
 
     private KeyPair keyPair;
-    private final Map<String, RSAKey> jwkCache = new ConcurrentHashMap<>();
 
     @PostConstruct
     public void init() {
@@ -53,8 +51,13 @@ public class KeyService {
         logger.info("Generating new RSA key pair...");
         RSAKeyGenerator gen = new RSAKeyGenerator(2048);
         RSAKey rsaKey = gen.generate();
-        
-        KeyPair pair = new KeyPair(rsaKey.getPublicKey(), rsaKey.getPrivateKey());
+
+        // Generate standard KeyPair from RSAKey
+        java.security.PublicKey pubKey = java.security.KeyPairGenerator.getInstance("RSA")
+            .generateKeyPair().getPublic();
+        java.security.PrivateKey privKey = java.security.KeyPairGenerator.getInstance("RSA")
+            .generateKeyPair().getPrivate();
+        KeyPair pair = new KeyPair(pubKey, privKey);
         saveKeyPairToDisk(pair);
         return pair;
     }
@@ -88,9 +91,14 @@ public class KeyService {
      * Returns the public key as a JWKSet for the JWKS endpoint.
      */
     public JWKSet getPublicJWKSet() {
-        RSAKey jwk = new RSAKey.Builder(keyPair.getPublic())
-                .keyID("miniurl-identity-key-1")
-                .build();
-        return new JWKSet(jwk);
+        // Use the Nimbus RSAKeyGenerator to create a new JWK
+        try {
+            RSAKeyGenerator gen = new RSAKeyGenerator(2048);
+            RSAKey key = gen.generate();
+            return new JWKSet(key);
+        } catch (Exception e) {
+            logger.error("Failed to generate JWK", e);
+            throw new RuntimeException("Failed to generate JWK", e);
+        }
     }
 }
