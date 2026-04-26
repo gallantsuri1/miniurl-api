@@ -198,8 +198,9 @@ class DtoTest {
         request.setPassword("pass");
         assertEquals("pass", request.getPassword());
 
-        request = new DeleteAccountRequest("pass2");
+        request = new DeleteAccountRequest(1L, "pass2");
         assertEquals("pass2", request.getPassword());
+        assertEquals(1L, request.getUserId());
     }
 
     @Test
