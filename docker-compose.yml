@@ -3,7 +3,10 @@ version: '3.8'
 services:
   # --- Service Discovery ---
   eureka-server:
-    image: miniurl-eureka-server:latest
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: eureka-server
     container_name: eureka-server
     ports:
       - "8761:8761"
@@ -95,9 +98,157 @@ services:
     networks:
       - miniurl-network
 
-networks:
-  miniurl-network:
-    driver: bridge
+  # --- API Gateway ---
+  api-gateway:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: api-gateway
+    container_name: api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - GATEWAY_REDIS_HOST=redis
+      - GATEWAY_REDIS_PORT=6379
+      - GATEWAY_EUREKA_URL=http://eureka-server:8761/eureka/
+      - IDENTITY_SERVICE_URL=http://identity-service:8081
+    depends_on:
+      - eureka-server
+      - redis
+    networks:
+      - miniurl-network
+
+  # --- Identity Service ---
+  identity-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: identity-service
+    container_name: identity-service
+    ports:
+      - "8082:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-identity:3306/identity_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+    depends_on:
+      - eureka-server
+      - kafka
+      - mysql-identity
+    networks:
+      - miniurl-network
+
+  # --- URL Service ---
+  url-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: url-service
+    container_name: url-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - SERVER_WORKER_ID=1
+      - APP_BASE_URL=http://localhost:8080
+      - APP_UI_BASE_URL=http://localhost:3000
+    depends_on:
+      - eureka-server
+      - kafka
+      - mysql-url
+    networks:
+      - miniurl-network
+
+  # --- Redirect Service ---
+  redirect-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: redirect-service
+    container_name: redirect-service
+    ports:
+      - "8083:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - REDIRECT_REDIS_HOST=redis
+      - REDIRECT_REDIS_PORT=6379
+      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - eureka-server
+      - redis
+      - kafka
+    networks:
+      - miniurl-network
+
+  # --- Feature Service ---
+  feature-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: feature-service
+    container_name: feature-service
+    ports:
+      - "8084:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
+    depends_on:
+      - eureka-server
+      - redis
+      - mysql-feature
+    networks:
+      - miniurl-network
+
+  # --- Notification Service ---
+  notification-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: notification-service
+    container_name: notification-service
+    ports:
+      - "8085:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+    depends_on:
+      - eureka-server
+      - kafka
+    networks:
+      - miniurl-network
+
+  # --- Analytics Service ---
+  analytics-service:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+      target: analytics-service
+    container_name: analytics-service
+    ports:
+      - "8086:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - MYSQL_ANALYTICS_HOST=mysql-url
+      - MYSQL_ANALYTICS_PORT=3306
+      - MYSQL_ANALYTICS_USER=root
+      - MYSQL_ANALYTICS_PASSWORD=root
+    depends_on:
+      - eureka-server
+      - kafka
+      - mysql-url
+    networks:
+      - miniurl-network
 
   # --- Monitoring ---
   prometheus:
@@ -124,6 +275,10 @@ networks:
       - miniurl-network
     depends_on:
       - prometheus
+
+networks:
+  miniurl-network:
+    driver: bridge
 
 volumes:
   identity_db_data:
