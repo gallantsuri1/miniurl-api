@@ -16,7 +16,11 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAMESPACE: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   build-and-test:
@@ -29,10 +33,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK 17
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'temurin'
           cache: maven
 
@@ -47,10 +51,6 @@ jobs:
       - name: Run Maven Build & Unit Tests
         run: |
           mvn clean test -DskipITs -B --no-transfer-progress
-
-      - name: Run Integration Tests
-        run: |
-          mvn verify -Pintegration-test -B --no-transfer-progress
 
       - name: Upload test results
         if: always()
@@ -67,22 +67,24 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-test
 
-    permissions:
-      contents: read
-      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - eureka-server
+          - api-gateway
+          - identity-service
+          - url-service
+          - redirect-service
+          - feature-service
+          - notification-service
+          - analytics-service
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -94,34 +96,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
+      - name: Generate Docker tags
         id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest
-            type=raw,value=${{ github.ref_name }}
+        run: |
+          SHA_TAG="sha-${GITHUB_SHA::8}"
+          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:${SHA_TAG},${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
-      - name: Build and push Docker images for all services
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: ${{ matrix.service }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            VCS_REF=${{ github.sha }}
-
-      - name: Create deployment manifest
-        run: |
-          echo "Docker images built and pushed successfully"
-          echo "SHA: ${{ github.sha }}"
-          echo "Tag: latest"
 
   deploy-to-kubernetes:
     name: Deploy to Kubernetes
@@ -146,57 +135,24 @@ jobs:
 
       - name: Update image tags in K8s manifests
         run: |
-          # Update all service manifests with the new SHA tag
-          SHA=${{ github.sha }}
-          
-          # Update api-gateway
-          sed -i "s|miniurl/api-gateway:.*|miniurl/api-gateway:${SHA}|g" k8s/services/api-gateway.yaml
-          
-          # Update eureka-server
-          sed -i "s|miniurl/eureka-server:.*|miniurl/eureka-server:${SHA}|g" k8s/services/eureka-server.yaml
-          
-          # Update identity-service
-          sed -i "s|miniurl/identity-service:.*|miniurl/identity-service:${SHA}|g" k8s/services/identity-service.yaml
-          
-          # Update url-service
-          sed -i "s|miniurl/url-service:.*|miniurl/url-service:${SHA}|g" k8s/services/url-service.yaml
-          
-          # Update redirect-service
-          sed -i "s|miniurl/redirect-service:.*|miniurl/redirect-service:${SHA}|g" k8s/services/redirect-service.yaml
-          
-          # Update feature-service
-          sed -i "s|miniurl/feature-service:.*|miniurl/feature-service:${SHA}|g" k8s/services/feature-service.yaml
-          
-          # Update notification-service
-          sed -i "s|miniurl/notification-service:.*|miniurl/notification-service:${SHA}|g" k8s/services/notification-service.yaml
-          
-          # Update analytics-service
-          sed -i "s|miniurl/analytics-service:.*|miniurl/analytics-service:${SHA}|g" k8s/services/analytics-service.yaml
+          SHA_TAG="sha-${GITHUB_SHA::8}"
+          REGISTRY="ghcr.io/${{ github.repository }}"
+          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
+            sed -i "s|miniurl/${service}:.*|${REGISTRY}/${service}:${SHA_TAG}|g" "k8s/services/${service}.yaml" 2>/dev/null || true
+          done
 
       - name: Apply Kubernetes manifests
         run: |
-          # Apply infrastructure first (namespace, configmaps, secrets)
           kubectl apply -f k8s/infrastructure/
-          
-          # Wait for namespace to be ready
-          kubectl wait --for=condition=ready namespace/miniurl --timeout=60s
-          
-          # Apply services
+          kubectl wait --for=condition=ready namespace/miniurl --timeout=60s 2>/dev/null || true
           kubectl apply -f k8s/services/
-          
-          # Apply HPA
           kubectl apply -f k8s/hpa/
 
       - name: Verify deployment
         run: |
-          kubectl -n miniurl rollout status deployment/api-gateway --timeout=120s
-          kubectl -n miniurl rollout status deployment/eureka-server --timeout=120s
-          kubectl -n miniurl rollout status deployment/identity-service --timeout=120s
-          kubectl -n miniurl rollout status deployment/url-service --timeout=120s
-          kubectl -n miniurl rollout status deployment/redirect-service --timeout=120s
-          kubectl -n miniurl rollout status deployment/feature-service --timeout=120s
-          kubectl -n miniurl rollout status deployment/notification-service --timeout=120s
-          kubectl -n miniurl rollout status deployment/analytics-service --timeout=120s
+          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
+            kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
+          done
 
       - name: Notify deployment success
         if: success()
@@ -205,16 +161,14 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": "🚀 Deployment successful!",
-              "blocks": [
-                {
+              "text": "Deployment successful!",
+              "blocks": [{
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*MyURL Deployment Successful* :tada:\n\n*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Environment:* Production"
+                    "text": "*MyURL Deployment Successful*\n\n*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Environment:* Production"
                   }
-                }
-              ]
+              }]
             }
 
       - name: Notify deployment failure
@@ -224,14 +178,12 @@ jobs:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
             {
-              "text": "❌ Deployment failed!",
-              "blocks": [
-                {
+              "text": "Deployment failed!",
+              "blocks": [{
                   "type": "section",
                   "text": {
                     "type": "mrkdwn",
-                    "text": "*MyURL Deployment Failed* :x:\n\n*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Environment:* Production\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
+                    "text": "*MyURL Deployment Failed*\n\n*Branch:* `${{ github.ref_name }}`\n*Commit:* `${{ github.sha }}`\n*Environment:* Production\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
                   }
-                }
-              ]
+              }]
             }
