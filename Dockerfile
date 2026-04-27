@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM eclipse-temurin:21-jdk-alpine AS base-build
+FROM maven:3-eclipse-temurin-21 AS base-build
 WORKDIR /app
 COPY pom.xml .
 COPY common common/
