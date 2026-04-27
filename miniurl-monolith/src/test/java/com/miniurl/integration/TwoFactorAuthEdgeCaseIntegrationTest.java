@@ -11,6 +11,7 @@ import com.miniurl.repository.GlobalFlagRepository;
 import com.miniurl.repository.RoleRepository;
 import com.miniurl.repository.UrlRepository;
 import com.miniurl.repository.UserRepository;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -101,6 +102,18 @@ class TwoFactorAuthEdgeCaseIntegrationTest {
             .build();
 
         userRepository.save(testUser);
+    }
+
+    @AfterEach
+    void tearDown() {
+        try {
+            urlRepository.deleteAll();
+            globalFlagRepository.deleteAll();
+            featureRepository.deleteAll();
+            userRepository.deleteAll();
+        } catch (Exception e) {
+            // Ignore cleanup errors
+        }
     }
 
     private User getTestUser() {

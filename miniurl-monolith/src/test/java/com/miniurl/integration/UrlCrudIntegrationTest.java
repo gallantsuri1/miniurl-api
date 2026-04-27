@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miniurl.entity.Role;
 import com.miniurl.entity.User;
 import com.miniurl.entity.UserStatus;
+import com.miniurl.repository.FeatureRepository;
+import com.miniurl.repository.GlobalFlagRepository;
 import com.miniurl.repository.RoleRepository;
 import com.miniurl.repository.UrlRepository;
 import com.miniurl.repository.UserRepository;
@@ -60,6 +62,12 @@ class UrlCrudIntegrationTest {
     private RoleRepository roleRepository;
 
     @Autowired
+    private GlobalFlagRepository globalFlagRepository;
+
+    @Autowired
+    private FeatureRepository featureRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private String jwtToken;
@@ -69,6 +77,8 @@ class UrlCrudIntegrationTest {
         // Clean up database before each test - delete URLs first to avoid FK constraints
         try {
             urlRepository.deleteAll();
+            globalFlagRepository.deleteAll();
+            featureRepository.deleteAll();
             userRepository.deleteAll();
         } catch (Exception e) {
             // Ignore cleanup errors
