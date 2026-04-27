@@ -22,7 +22,7 @@ public class GreenMailConfig {
      * Creates and starts GreenMail server for testing.
      * Configured with SMTP on port 3025 without authentication for testing.
      */
-    @Bean
+    @Bean(destroyMethod = "stop")
     public GreenMail greenMail() {
         // Create SMTP server setup without authentication
         ServerSetup smtp = new ServerSetup(3025, null, ServerSetup.PROTOCOL_SMTP);

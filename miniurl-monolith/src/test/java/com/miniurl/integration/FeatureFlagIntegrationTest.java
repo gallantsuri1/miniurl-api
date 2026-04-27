@@ -6,6 +6,7 @@ import com.miniurl.entity.GlobalFlag;
 import com.miniurl.entity.Role;
 import com.miniurl.entity.User;
 import com.miniurl.entity.UserStatus;
+import com.miniurl.repository.EmailInviteRepository;
 import com.miniurl.repository.FeatureRepository;
 import com.miniurl.repository.GlobalFlagRepository;
 import com.miniurl.repository.RoleRepository;
@@ -18,6 +19,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -32,6 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @DisplayName("Global Feature Flags Integration Tests")
 class FeatureFlagIntegrationTest {
 
@@ -54,18 +57,26 @@ class FeatureFlagIntegrationTest {
     private GlobalFlagRepository globalFlagRepository;
 
     @Autowired
+    private EmailInviteRepository emailInviteRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @BeforeEach
     void setUp() {
         // Clean up
         try {
+            emailInviteRepository.deleteAll();
             globalFlagRepository.deleteAll();
             featureRepository.deleteAll();
             userRepository.deleteAll();
         } catch (Exception e) {
             // Ignore cleanup errors
         }
+
+        // Ensure USER role exists for tests that need it
+        roleRepository.findByName("USER")
+            .orElseGet(() -> roleRepository.save(new Role("USER", "Regular user")));
     }
 
     @Test

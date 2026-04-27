@@ -10,7 +10,7 @@ spring:
 
   # H2 In-Memory Database for Testing - MUST override any MySQL config
   datasource:
-    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    url: jdbc:h2:mem:testdb;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
     username: sa
     password:
     driver-class-name: org.h2.Driver

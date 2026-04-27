@@ -17,6 +17,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -39,6 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @DisplayName("Authentication Integration Tests")
 class AuthenticationIntegrationTest {
 
@@ -61,6 +63,7 @@ class AuthenticationIntegrationTest {
     private PasswordEncoder passwordEncoder;
 
     private Role userRole;
+    private User testUser;
 
     @BeforeEach
     void setUp() {
@@ -76,10 +79,11 @@ class AuthenticationIntegrationTest {
         userRole = roleRepository.findByName("USER")
             .orElseGet(() -> roleRepository.save(new Role("USER", "Regular user")));
 
-        // Create test user with strong password
-        User testUser = User.builder()
-            .username("testuser")
-            .email("test@example.com")
+        // Create test user with unique username/email to avoid cross-test conflicts
+        String uniqueId = String.valueOf(System.currentTimeMillis());
+        testUser = User.builder()
+            .username("authtestuser" + uniqueId)
+            .email("authtest" + uniqueId + "@example.com")
             .firstName("Test")
             .lastName("User")
             .password(passwordEncoder.encode("TestPass123!@#"))
@@ -95,7 +99,7 @@ class AuthenticationIntegrationTest {
     @DisplayName("Login with valid credentials should return JWT token")
     void loginWithValidCredentials_shouldReturnJwtToken() throws Exception {
         // Arrange
-        JwtAuthRequest request = new JwtAuthRequest("testuser", "TestPass123!@#");
+        JwtAuthRequest request = new JwtAuthRequest(testUser.getUsername(), "TestPass123!@#");
 
         // Act & Assert
         MvcResult result = mockMvc.perform(post("/api/auth/login")
@@ -105,7 +109,7 @@ class AuthenticationIntegrationTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.success").value(true))
             .andExpect(jsonPath("$.data.token").exists())
-            .andExpect(jsonPath("$.data.username").value("testuser"))
+            .andExpect(jsonPath("$.data.username").value(testUser.getUsername()))
             .andExpect(jsonPath("$.data.userId").exists())
             .andReturn();
 
@@ -121,7 +125,7 @@ class AuthenticationIntegrationTest {
     @DisplayName("Login with invalid credentials should return 400")
     void loginWithInvalidCredentials_shouldReturnBadRequest() throws Exception {
         // Arrange
-        JwtAuthRequest request = new JwtAuthRequest("testuser", "wrongpassword");
+        JwtAuthRequest request = new JwtAuthRequest(testUser.getUsername(), "wrongpassword");
 
         // Act & Assert - AuthController returns 400 for bad credentials
         mockMvc.perform(post("/api/auth/login")
@@ -151,7 +155,7 @@ class AuthenticationIntegrationTest {
     @DisplayName("Access protected endpoint with valid JWT token should succeed")
     void accessProtectedEndpointWithValidToken_shouldSucceed() throws Exception {
         // Get JWT token first
-        String jwtToken = TestJwtUtil.getJwtToken(mockMvc, "testuser", "TestPass123!@#");
+        String jwtToken = TestJwtUtil.getJwtToken(mockMvc, testUser.getUsername(), "TestPass123!@#");
 
         // Act & Assert - Access protected endpoint with JWT authentication
         mockMvc.perform(get("/api/urls")
