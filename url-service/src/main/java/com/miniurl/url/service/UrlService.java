@@ -1,13 +1,13 @@
 package com.miniurl.url.service;
 
-import com.miniurl.common.dto.CreateUrlRequest;
-import com.miniurl.common.dto.PagedResponse;
-import com.miniurl.common.dto.PageableRequest;
-import com.miniurl.common.dto.UrlResponse;
-import com.miniurl.common.exception.AliasNotAvailableException;
-import com.miniurl.common.exception.ResourceNotFoundException;
-import com.miniurl.common.exception.UnauthorizedException;
-import com.miniurl.common.exception.UrlValidationException;
+import com.miniurl.dto.CreateUrlRequest;
+import com.miniurl.dto.PagedResponse;
+import com.miniurl.dto.PageableRequest;
+import com.miniurl.dto.UrlResponse;
+import com.miniurl.exception.AliasNotAvailableException;
+import com.miniurl.exception.ResourceNotFoundException;
+import com.miniurl.exception.UnauthorizedException;
+import com.miniurl.exception.UrlValidationException;
 import com.miniurl.url.entity.Url;
 import com.miniurl.url.repository.UrlRepository;
 import com.miniurl.url.util.Base62;

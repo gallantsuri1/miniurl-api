@@ -1,6 +1,6 @@
 package com.miniurl.url.service;
 
-import com.miniurl.common.exception.UrlLimitExceededException;
+import com.miniurl.exception.UrlLimitExceededException;
 import com.miniurl.url.repository.UrlRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

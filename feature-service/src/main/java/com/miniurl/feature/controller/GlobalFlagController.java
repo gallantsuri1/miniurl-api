@@ -1,6 +1,6 @@
 package com.miniurl.feature.controller;
 
-import com.miniurl.common.dto.GlobalFlagDTO;
+import com.miniurl.dto.GlobalFlagDTO;
 import com.miniurl.feature.service.GlobalFlagService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

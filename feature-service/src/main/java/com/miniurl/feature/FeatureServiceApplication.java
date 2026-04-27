@@ -1,15 +1,15 @@
-package com.miniurl.url;
+package com.miniurl.feature;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.autoconfigure.domain.EntityScan;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableScheduling
-public class UrlServiceApplication {
+@EntityScan("com.miniurl.entity")
+public class FeatureServiceApplication {
     public static void main(String[] args) {
-        SpringApplication.run(UrlServiceApplication.class, args);
+        SpringApplication.run(FeatureServiceApplication.class, args);
     }
 }

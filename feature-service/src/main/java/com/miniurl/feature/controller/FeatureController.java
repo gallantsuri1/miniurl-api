@@ -1,7 +1,7 @@
 package com.miniurl.feature.controller;
 
-import com.miniurl.common.dto.FeatureFlagDTO;
-import com.miniurl.common.dto.GlobalFlagDTO;
+import com.miniurl.dto.FeatureFlagDTO;
+import com.miniurl.dto.GlobalFlagDTO;
 import com.miniurl.feature.service.FeatureFlagService;
 import com.miniurl.feature.service.GlobalFlagService;
 import lombok.RequiredArgsConstructor;

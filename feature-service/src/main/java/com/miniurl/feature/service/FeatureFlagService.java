@@ -1,9 +1,10 @@
 package com.miniurl.feature.service;
 
-import com.miniurl.common.dto.FeatureFlagDTO;
-import com.miniurl.common.exception.ResourceNotFoundException;
-import com.miniurl.feature.entity.Feature;
-import com.miniurl.feature.entity.FeatureFlag;
+import com.miniurl.dto.FeatureFlagDTO;
+import com.miniurl.entity.Feature;
+import com.miniurl.entity.FeatureFlag;
+import com.miniurl.entity.Role;
+import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.feature.repository.FeatureFlagRepository;
 import com.miniurl.feature.repository.FeatureRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +13,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -57,7 +57,7 @@ public class FeatureFlagService {
 
     @Transactional(readOnly = true)
     public List<FeatureFlagDTO> getAllFeatures() {
-        return featureFlagRepository.findAll().stream()
+        return featureFlagRepository.findAllWithFeatures().stream()
                 .map(FeatureFlagDTO::new)
                 .collect(Collectors.toList());
     }
@@ -88,11 +88,11 @@ public class FeatureFlagService {
         featureFlagRepository.save(featureFlag);
 
         // Invalidate cache for this role and feature
-        redisTemplate.delete(FEATURE_FLAG_CACHE_PREFIX + featureFlag.getRoleId() + ":" + featureFlag.getFeature().getFeatureKey());
+        redisTemplate.delete(FEATURE_FLAG_CACHE_PREFIX + featureFlag.getRole().getId() + ":" + featureFlag.getFeature().getFeatureKey());
 
         log.info("Feature '{}' (role ID: {}) toggled from {} to {}",
                 featureFlag.getFeature().getFeatureKey(), 
-                featureFlag.getRoleId(), 
+                featureFlag.getRole().getId(), 
                 previousState, enabled);
 
         return new FeatureFlagDTO(featureFlag);
@@ -103,7 +103,10 @@ public class FeatureFlagService {
         Feature feature = featureRepository.findById(featureId)
             .orElseThrow(() -> new ResourceNotFoundException("Feature not found with id: " + featureId));
 
-        FeatureFlag featureFlag = new FeatureFlag(feature, roleId, enabled);
+        Role role = new Role();
+        role.setId(roleId);
+
+        FeatureFlag featureFlag = new FeatureFlag(feature, role, enabled);
         featureFlagRepository.save(featureFlag);
 
         log.info("Created feature flag for '{}' (role ID: {})", feature.getFeatureKey(), roleId);
@@ -126,14 +129,22 @@ public class FeatureFlagService {
 
         // Create or update ADMIN flag
         FeatureFlag adminFlag = featureFlagRepository.findByFeatureKeyAndRoleId(featureKey, adminRoleId)
-            .orElse(new FeatureFlag(feature, adminRoleId, adminEnabled));
+            .orElseGet(() -> {
+                Role adminRole = new Role();
+                adminRole.setId(adminRoleId);
+                return new FeatureFlag(feature, adminRole, adminEnabled);
+            });
         adminFlag.setEnabled(adminEnabled);
         featureFlagRepository.save(adminFlag);
         redisTemplate.delete(FEATURE_FLAG_CACHE_PREFIX + adminRoleId + ":" + featureKey);
 
         // Create or update USER flag
         FeatureFlag userFlag = featureFlagRepository.findByFeatureKeyAndRoleId(featureKey, userRoleId)
-            .orElse(new FeatureFlag(feature, userRoleId, userEnabled));
+            .orElseGet(() -> {
+                Role userRole = new Role();
+                userRole.setId(userRoleId);
+                return new FeatureFlag(feature, userRole, userEnabled);
+            });
         userFlag.setEnabled(userEnabled);
         FeatureFlag savedUserFlag = featureFlagRepository.save(userFlag);
         redisTemplate.delete(FEATURE_FLAG_CACHE_PREFIX + userRoleId + ":" + featureKey);
@@ -149,7 +160,7 @@ public class FeatureFlagService {
             .orElseThrow(() -> new ResourceNotFoundException("Feature flag not found with id: " + id));
         
         String featureKey = featureFlag.getFeature().getFeatureKey();
-        Long roleId = featureFlag.getRoleId();
+        Long roleId = featureFlag.getRole().getId();
         
         featureFlagRepository.deleteById(id);
         

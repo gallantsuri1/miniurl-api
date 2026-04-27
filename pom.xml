@@ -14,10 +14,17 @@
 
     <groupId>com.miniurl</groupId>
     <artifactId>miniurl-parent</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>MyURL Microservices Parent</name>
     <description>Parent POM for MyURL Microservices Architecture</description>
+
+    <scm>
+        <connection>scm:git:git@github.com:gallantsuri1/miniurl-api.git</connection>
+        <developerConnection>scm:git:git@github.com:gallantsuri1/miniurl-api.git</developerConnection>
+        <url>https://github.com/gallantsuri1/miniurl-api</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <properties>
         <java.version>21</java.version>
@@ -95,6 +102,16 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
                     <skip>true</skip>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>3.1.0</version>
+                <configuration>
+                    <autoVersionSubmodules>true</autoVersionSubmodules>
+                    <tagNameFormat>v@{project.version}</tagNameFormat>
+                    <pushChanges>true</pushChanges>
                 </configuration>
             </plugin>
         </plugins>

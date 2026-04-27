@@ -1,9 +1,9 @@
 package com.miniurl.feature.service;
 
-import com.miniurl.common.dto.GlobalFlagDTO;
-import com.miniurl.common.exception.ResourceNotFoundException;
-import com.miniurl.feature.entity.Feature;
-import com.miniurl.feature.entity.GlobalFlag;
+import com.miniurl.dto.GlobalFlagDTO;
+import com.miniurl.entity.Feature;
+import com.miniurl.entity.GlobalFlag;
+import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.feature.repository.FeatureRepository;
 import com.miniurl.feature.repository.GlobalFlagRepository;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -108,7 +107,7 @@ public class GlobalFlagService {
             .orElseGet(() -> featureRepository.save(new Feature(featureKey, featureName, description)));
 
         GlobalFlag globalFlag = globalFlagRepository.findByFeatureKey(featureKey)
-            .orElse(new GlobalFlag(feature, enabled));
+            .orElseGet(() -> new GlobalFlag(feature, enabled));
         globalFlag.setEnabled(enabled);
         globalFlagRepository.save(globalFlag);
 
@@ -135,9 +134,6 @@ public class GlobalFlagService {
 
     @Transactional(readOnly = true)
     public String getGlobalAppName() {
-        // This is a specific high-frequency check, we could cache it specifically
-        // but isGlobalFeatureEnabled already handles caching for the boolean part.
-        // For the name, we'll just hit the DB or implement a similar cache.
         return globalFlagRepository.findByFeatureKey("GLOBAL_APP_NAME")
                 .filter(GlobalFlag::isEnabled)
                 .map(gf -> gf.getFeature().getFeatureName())

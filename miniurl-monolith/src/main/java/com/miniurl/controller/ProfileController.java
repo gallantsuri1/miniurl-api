@@ -130,12 +130,15 @@ public class ProfileController {
             User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
+            com.miniurl.enums.Theme requestTheme = request.getTheme();
+            Theme theme = requestTheme != null ? Theme.valueOf(requestTheme.name()) : null;
+
             User updatedUser = authService.updateProfile(
                 user.getId(),
                 request.getFirstName(),
                 request.getLastName(),
                 request.getEmail(),
-                request.getTheme()
+                theme
             );
 
             auditLogService.logAction(updatedUser, "PROFILE_UPDATE", "USER", updatedUser.getId(),
