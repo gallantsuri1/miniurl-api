@@ -128,8 +128,8 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy-to-kubernetes:
-    name: Deploy to Kubernetes
-    runs-on: ubuntu-latest
+    name: Deploy to Kubernetes (Helm)
+    runs-on: self-hosted
     needs: build-and-push-docker
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
 
@@ -137,31 +137,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
-
-      - name: Configure Kubernetes cluster
+      - name: Deploy with Helm
         run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > $HOME/.kube/config
-          kubectl config use-context ${{ secrets.KUBE_CONTEXT }}
-
-      - name: Update image tags in K8s manifests
-        run: |
-          SHA_TAG="sha-${GITHUB_SHA::8}"
-          REGISTRY="ghcr.io/${{ github.repository }}"
-          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
-            sed -i "s|miniurl/${service}:.*|${REGISTRY}/${service}:${SHA_TAG}|g" "k8s/services/${service}.yaml" 2>/dev/null || true
-          done
-
-      - name: Apply Kubernetes manifests
-        run: |
-          kubectl apply -f k8s/infrastructure/
-          kubectl wait --for=condition=ready namespace/miniurl --timeout=60s 2>/dev/null || true
-          kubectl apply -f k8s/services/
-          kubectl apply -f k8s/hpa/
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-prod.yaml \
+            --namespace miniurl \
+            --create-namespace \
+            --atomic \
+            --timeout 5m
 
       - name: Verify deployment
         run: |

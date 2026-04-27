@@ -14,16 +14,18 @@
 
 ### Prerequisites
 
-- **Java 17** or higher
+- **Java 21** or higher
 - **Maven 3.8+**
 - **Docker & Docker Compose** (for infrastructure services)
+- **Helm 3** (for Kubernetes deployment)
+- **kubectl** (for Kubernetes deployment)
 
 ### Step 1: Install Prerequisites
 
 #### macOS
 ```bash
-# Install Java 17
-brew install openjdk@17
+# Install Java 21
+brew install openjdk@21
 
 # Install Maven
 brew install maven
@@ -34,9 +36,9 @@ brew install --cask docker
 
 #### Linux (Ubuntu/Debian)
 ```bash
-# Install Java 17
+# Install Java 21
 sudo apt update
-sudo apt install openjdk-17-jdk maven -y
+sudo apt install openjdk-21-jdk maven -y
 
 # Install Docker
 curl -fsSL https://get.docker.com -o get-docker.sh
@@ -46,7 +48,7 @@ sudo sh get-docker.sh
 #### Windows
 ```bash
 # Download and install from:
-# Java: https://adoptium.net/temurin/releases/?version=17
+# Java: https://adoptium.net/temurin/releases/?version=21
 # Maven: https://maven.apache.org/download.cgi
 # Docker Desktop: https://www.docker.com/products/docker-desktop/
 ```
@@ -214,87 +216,78 @@ docker compose logs eureka-server
 
 ---
 
-## Kubernetes Deployment
+## Kubernetes Deployment with Helm
 
-### Prerequisites
+The project includes a Helm chart at `helm/miniurl/` that deploys all 8 microservices. Infrastructure (MySQL, Kafka, Redis) runs via Docker Compose locally or separately on the server.
 
-- **kubectl** (v1.28.0+)
-- **Helm** (optional)
-- **Kubernetes Cluster** (EKS, GKE, AKS, or Minikube)
-- **Nginx Ingress Controller**
+### Chart Structure
 
-### Step 1: Install Nginx Ingress Controller
-
-```bash
-# Minikube
-minikube addons enable ingress
-
-# Generic Kubernetes
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.8.1/deploy/static/provider/cloud/deploy.yaml
+```
+helm/miniurl/
+  Chart.yaml
+  values.yaml          # defaults (ghcr.io images, prod config)
+  values-dev.yaml      # local dev overrides (1 replica, local images)
+  values-prod.yaml     # prod overrides (replicas, HPA)
+  templates/
+    configmap.yaml
+    deployment.yaml    # single template, iterates all services
+    service.yaml
+    hpa.yaml
 ```
 
-### Step 2: Create Namespace
+### Dev Deployment (Local — Minikube/Kind)
+
+Start infrastructure, build images, and deploy with Helm:
 
 ```bash
-kubectl create namespace miniurl
+# Terminal 1: Start infrastructure
+docker compose up -d
+
+# Terminal 2: Start K8s cluster and deploy
+minikube start
+eval $(minikube docker-env)
+docker compose build
+helm install miniurl ./helm/miniurl --values ./helm/miniurl/values-dev.yaml
+
+# Verify
+kubectl -n miniurl get pods
+minikube service -n miniurl api-gateway
 ```
 
-### Step 3: Apply Infrastructure
+### Prod Deployment (Home Server)
+
+A **self-hosted GitHub Actions runner** on the server handles automated deployment. Manual deploy:
 
 ```bash
-# Apply global configuration
-kubectl apply -f k8s/infrastructure/global-config.yaml
+# Prerequisites on the server
+# Install tools
+sudo apt install docker.io
+curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz && sudo mv linux-amd64/helm /usr/local/bin/
+curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl" && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 
-# Apply monitoring stack (Prometheus, Grafana)
-kubectl apply -f k8s/infrastructure/monitoring.yaml
+# Add self-hosted runner (one-time setup)
+# Go to: https://github.com/gallantsuri1/miniurl-api/settings/actions/runners
+# Click "New self-hosted runner", choose Linux, run the commands
+# Register as a service:
+sudo ./svc.sh install
+sudo ./svc.sh start
 
-# Apply ELK stack (optional)
-kubectl apply -f k8s/infrastructure/elk.yaml
+# Manual deploy (if not using CI)
+helm upgrade --install miniurl ./helm/miniurl \
+  --values ./helm/miniurl/values-prod.yaml \
+  --namespace miniurl --create-namespace \
+  --atomic --timeout 5m
 ```
 
-### Step 4: Apply Services
+### Automated Deploy (CI/CD)
 
-```bash
-# Apply all services
-kubectl apply -f k8s/services/
+1. Merge PR to `main` → CI builds Docker images on GitHub runners
+2. Images pushed to `ghcr.io/...:latest` + Docker Hub
+3. Self-hosted runner on the server picks up the `deploy-to-kubernetes` job
+4. Runs `helm upgrade --install --atomic` with `values-prod.yaml`
+5. On failure, Helm auto-rolls back
 
-# Wait for deployments
-kubectl -n miniurl rollout status deployment/api-gateway --timeout=120s
-kubectl -n miniurl rollout status deployment/eureka-server --timeout=120s
-kubectl -n miniurl rollout status deployment/identity-service --timeout=120s
-kubectl -n miniurl rollout status deployment/url-service --timeout=120s
-kubectl -n miniurl rollout status deployment/redirect-service --timeout=120s
-kubectl -n miniurl rollout status deployment/feature-service --timeout=120s
-kubectl -n miniurl rollout status deployment/notification-service --timeout=120s
-kubectl -n miniurl rollout status deployment/analytics-service --timeout=120s
-```
-
-### Step 5: Apply HPA
-
-```bash
-kubectl apply -f k8s/hpa/
-```
-
-### Step 6: Apply Ingress
-
-```bash
-kubectl apply -f k8s/ingress/
-```
-
-### Step 7: Initialize Databases
-
-```bash
-# Initialize URL database
-kubectl -n miniurl exec -it mysql-url-0 -- mysql -u root -proot < scripts/init-url-db.sql
-
-# Initialize Identity database
-kubectl -n miniurl exec -it mysql-identity-0 -- mysql -u root -proot < scripts/init-identity-db.sql
-
-# Initialize Feature database
-kubectl -n miniurl exec -it mysql-feature-0 -- mysql -u root -proot < scripts/init-feature-db.sql
-```
-
-### Step 8: Verify Deployment
+### Verify Deployment
 
 ```bash
 # Check all pods
@@ -317,17 +310,35 @@ curl http://api.miniurl.com/api/health
 
 ### GitHub Actions Workflows
 
-The project includes two main workflows:
+The project includes three workflows:
 
 1. **PR Validation** (`.github/workflows/pr-validation.yml`)
-   - Runs on pull requests
-   - Builds and tests code
-   - Uploads coverage reports
+   - Runs on pull requests to `main`
+   - Builds, runs tests
+   - Pushes Docker images to ghcr.io (`pr-<number>`) and Docker Hub (SNAPSHOT version)
 
 2. **Main Pipeline** (`.github/workflows/main-pipeline.yml`)
-   - Runs on merge to main/master
-   - Builds and pushes Docker images
-   - Deploys to Kubernetes
+   - Runs on push/merge to `main`
+   - Builds, runs tests
+   - Pushes Docker images to ghcr.io (`latest`, `sha-<commit>`, `main`) and Docker Hub (release version)
+   - **Auto-deploys** via a self-hosted runner on the server using `helm upgrade --install`
+   - Auto-bumps patch version and commits `[skip ci]`
+
+3. **Release** (`.github/workflows/release.yml`)
+   - Triggered by `v*` tags or manual dispatch
+   - Pushes to ghcr.io and Docker Hub with version tags
+
+### Deploy Flow
+
+```
+Push/merge to main → Build & test → Push Docker images
+                                       ↓
+                      Self-hosted runner picks up job
+                                       ↓
+                      helm upgrade --install --atomic
+                                       ↓
+                      Verify rollouts → Slack notification
+```
 
 ### Required GitHub Secrets
 
@@ -335,19 +346,28 @@ The project includes two main workflows:
 |--------|-------------|
 | `DOCKER_USER` | Docker Hub username |
 | `DOCKER_API_TOKEN` | Docker Hub API token |
-| `KUBE_CONFIG` | Base64 encoded kubeconfig |
-| `KUBE_CONTEXT` | Kubernetes context name |
+| `SLACK_WEBHOOK_URL` | Slack webhook for deploy notifications |
 
-### Manual Deployment
+### Self-Hosted Runner Setup
+
+The deploy job requires a self-hosted runner on the server with these tools:
 
 ```bash
-# Build and push Docker images
-docker build -f Dockerfile.multi --target build-api-gateway -t miniurl/api-gateway:latest .
-docker push miniurl/api-gateway:latest
-
-# Update Kubernetes deployment
-kubectl -n miniurl set image deployment/api-gateway api-gateway=miniurl/api-gateway:latest
+sudo apt install docker.io
+sudo snap install helm --classic
+sudo snap install kubectl --classic
 ```
+
+To add the runner:
+1. Go to repo **Settings → Actions → Runners → Add runner**
+2. Follow the Linux instructions
+3. Install as a service: `sudo ./svc.sh install && sudo ./svc.sh start`
+
+### Version Management
+
+- **Development**: `1.0.0-SNAPSHOT` — all PRs and local builds
+- **Main merge**: Auto-bumps patch → `1.0.1-SNAPSHOT`
+- **Release**: `mvn release:prepare` creates tag `v1.0.0` → `mvn release:perform` builds release
 
 ---
 
