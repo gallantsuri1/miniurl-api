@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "miniurl.labels" (dict "name" "global-config") | nindent 4 }}
+data:
+  {{- toYaml .Values.globalConfig | nindent 2 }}

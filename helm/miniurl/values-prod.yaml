@@ -1,0 +1,52 @@
+globalConfig:
+  SPRING_PROFILES_ACTIVE: "prod"
+  APP_BASE_URL: "http://api.your-server.com"
+
+services:
+  api-gateway:
+    replicas: 2
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+
+  redirect-service:
+    replicas: 3
+    hpa:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+
+  identity-service:
+    replicas: 2
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+
+  url-service:
+    replicas: 2
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+
+  feature-service:
+    replicas: 2
+    hpa:
+      enabled: false
+
+  eureka-server:
+    replicas: 1
+    hpa:
+      enabled: false
+
+  notification-service:
+    replicas: 1
+    hpa:
+      enabled: false
+
+  analytics-service:
+    replicas: 1
+    hpa:
+      enabled: false

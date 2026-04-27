@@ -1,0 +1,195 @@
+namespace: miniurl
+
+globalConfig:
+  APP_BASE_URL: "http://api.miniurl.com"
+  APP_UI_BASE_URL: "http://miniurl.com"
+  SPRING_PROFILES_ACTIVE: "prod"
+  EUREKA_SERVER_URL: "http://eureka-server:8761/eureka/"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  MYSQL_URL_HOST: "mysql-url"
+  MYSQL_URL_PORT: "3306"
+  MYSQL_URL_DB: "url_db"
+  MYSQL_IDENTITY_HOST: "mysql-identity"
+  MYSQL_IDENTITY_PORT: "3306"
+  MYSQL_IDENTITY_DB: "identity_db"
+  MYSQL_FEATURE_HOST: "mysql-feature"
+  MYSQL_FEATURE_PORT: "3306"
+  MYSQL_FEATURE_DB: "feature_db"
+  MYSQL_ANALYTICS_HOST: "mysql-analytics"
+  MYSQL_ANALYTICS_PORT: "3306"
+  MYSQL_ANALYTICS_DB: "analytics_db"
+
+services:
+  api-gateway:
+    replicas: 2
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/api-gateway
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8080
+        servicePort: 80
+    serviceType: LoadBalancer
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      cpu: 70
+      memory: 80
+    env: []
+
+  eureka-server:
+    replicas: 1
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/eureka-server
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8761
+        servicePort: 8761
+    serviceType: ClusterIP
+    hpa:
+      enabled: false
+    env: []
+
+  identity-service:
+    replicas: 2
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/identity-service
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8081
+        servicePort: 8081
+    serviceType: ClusterIP
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 6
+      cpu: 70
+      memory: 80
+    env:
+      - name: SPRING_DATASOURCE_URL
+        value: "jdbc:mysql://mysql-identity:3306/identity_db"
+      - name: SPRING_DATASOURCE_USERNAME
+        value: "root"
+      - name: SPRING_DATASOURCE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: db-secrets
+            key: MYSQL_ROOT_PASSWORD
+
+  url-service:
+    replicas: 2
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/url-service
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8081
+        servicePort: 8081
+    serviceType: ClusterIP
+    hpa:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 8
+      cpu: 70
+      memory: 80
+    env:
+      - name: SPRING_DATASOURCE_URL
+        value: "jdbc:mysql://mysql-url:3306/url_db"
+      - name: SPRING_DATASOURCE_USERNAME
+        value: "root"
+      - name: SPRING_DATASOURCE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: db-secrets
+            key: MYSQL_ROOT_PASSWORD
+
+  redirect-service:
+    replicas: 3
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/redirect-service
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8080
+        servicePort: 8080
+    serviceType: ClusterIP
+    hpa:
+      enabled: true
+      minReplicas: 3
+      maxReplicas: 20
+      cpu: 70
+      memory: 80
+    env: []
+
+  feature-service:
+    replicas: 2
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/feature-service
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8081
+        servicePort: 8081
+    serviceType: ClusterIP
+    hpa:
+      enabled: false
+    env:
+      - name: SPRING_DATASOURCE_URL
+        value: "jdbc:mysql://mysql-feature:3306/feature_db"
+      - name: SPRING_DATASOURCE_USERNAME
+        value: "root"
+      - name: SPRING_DATASOURCE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: db-secrets
+            key: MYSQL_ROOT_PASSWORD
+
+  notification-service:
+    replicas: 1
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/notification-service
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8080
+        servicePort: 8080
+    serviceType: ClusterIP
+    hpa:
+      enabled: false
+    env: []
+
+  analytics-service:
+    replicas: 1
+    image:
+      repository: ghcr.io/gallantsuri1/miniurl-api/analytics-service
+      tag: latest
+      pullPolicy: Always
+    ports:
+      - name: http
+        containerPort: 8080
+        servicePort: 8080
+    serviceType: ClusterIP
+    hpa:
+      enabled: false
+    env:
+      - name: SPRING_DATASOURCE_URL
+        value: "jdbc:mysql://mysql-analytics:3306/analytics_db"
+      - name: SPRING_DATASOURCE_USERNAME
+        value: "root"
+      - name: SPRING_DATASOURCE_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: db-secrets
+            key: MYSQL_ROOT_PASSWORD
