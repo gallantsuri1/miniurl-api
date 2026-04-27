@@ -2,7 +2,19 @@
 FROM maven:3-eclipse-temurin-21 AS base-build
 WORKDIR /app
 COPY pom.xml .
-COPY common common/
+# Copy parent pom and all module poms for reactor resolution
+COPY common/pom.xml common/
+COPY eureka-server/pom.xml eureka-server/
+COPY api-gateway/pom.xml api-gateway/
+COPY identity-service/pom.xml identity-service/
+COPY url-service/pom.xml url-service/
+COPY redirect-service/pom.xml redirect-service/
+COPY feature-service/pom.xml feature-service/
+COPY notification-service/pom.xml notification-service/
+COPY analytics-service/pom.xml analytics-service/
+COPY miniurl-monolith/pom.xml miniurl-monolith/
+# Copy common source code (dependency for all services)
+COPY common/src common/src/
 RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline -DskipTests || true
 
 # Individual service stages
