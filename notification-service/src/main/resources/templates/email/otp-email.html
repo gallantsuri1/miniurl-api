@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; background: #fff;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fff;">
+        <tr>
+            <td align="center" style="padding: 40px 20px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden;">
+                    <!-- Header -->
+                    <tr>
+                        <td style="padding: 24px 24px 20px; border-bottom: 2px solid #4a90d9; text-align: center;">
+                            <h1 style="margin: 0; font-size: 20px; font-weight: 600; color: #1a1a1a;">Verification Code</h1>
+                        </td>
+                    </tr>
+                    <!-- Content -->
+                    <tr>
+                        <td style="padding: 24px;">
+                            <p style="margin: 0 0 16px; font-size: 15px; color: #444;">Hello <strong th:text="${username}">User</strong>,</p>
+                            <p style="margin: 0 0 24px; font-size: 15px; color: #444;">Your verification code for <strong th:text="${appName}">App</strong> is:</p>
+                            <!-- OTP Code Box -->
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td style="padding: 20px; text-align: center; border: 2px dashed #4a90d9; border-radius: 6px;">
+                                        <span style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #4a90d9;" th:text="${otp}">000000</span>
+                                    </td>
+                                </tr>
+                            </table>
+                            <p style="margin: 20px 0 0; font-size: 13px; color: #888;">This code will expire in 10 minutes.</p>
+                            <p style="margin: 8px 0 0; font-size: 13px; color: #888;">If you didn't request this, please ignore this email.</p>
+                        </td>
+                    </tr>
+                    <!-- Footer -->
+                    <tr>
+                        <td style="padding: 16px 24px; border-top: 1px solid #e0e0e0; text-align: center;">
+                            <p style="margin: 0; font-size: 12px; color: #999;">&copy; <span th:text="${year}">2026</span> <span th:text="${appName}">App</span>. All rights reserved.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

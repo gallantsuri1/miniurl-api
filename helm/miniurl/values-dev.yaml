@@ -1,0 +1,76 @@
+globalConfig:
+  SPRING_PROFILES_ACTIVE: "dev"
+  APP_BASE_URL: "http://localhost:8080"
+
+services:
+  api-gateway:
+    replicas: 1
+    image:
+      repository: miniurl/api-gateway
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  eureka-server:
+    replicas: 1
+    image:
+      repository: miniurl/eureka-server
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  identity-service:
+    replicas: 1
+    image:
+      repository: miniurl/identity-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  url-service:
+    replicas: 1
+    image:
+      repository: miniurl/url-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  redirect-service:
+    replicas: 1
+    image:
+      repository: miniurl/redirect-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  feature-service:
+    replicas: 1
+    image:
+      repository: miniurl/feature-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  notification-service:
+    replicas: 1
+    image:
+      repository: miniurl/notification-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+
+  analytics-service:
+    replicas: 1
+    image:
+      repository: miniurl/analytics-service
+      tag: latest
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false

@@ -1,0 +1,36 @@
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    {{- include "miniurl.labels" (dict "name" $name) | nindent 4 }}
+spec:
+  replicas: {{ $svc.replicas }}
+  selector:
+    matchLabels:
+      app: {{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $name }}
+    spec:
+      containers:
+      - name: {{ $name }}
+        image: "{{ $svc.image.repository }}:{{ $svc.image.tag }}"
+        imagePullPolicy: {{ $svc.image.pullPolicy | default "Always" }}
+        ports:
+        {{- range $svc.ports }}
+        - name: {{ .name }}
+          containerPort: {{ .containerPort }}
+        {{- end }}
+        envFrom:
+        - configMapRef:
+            name: global-config
+        {{- with $svc.env }}
+        env:
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

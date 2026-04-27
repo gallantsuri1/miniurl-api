@@ -3,8 +3,10 @@
 ## Table of Contents
 1. [Local Development Setup](#local-development-setup)
 2. [Docker Deployment (Home Server)](#docker-deployment-home-server)
-3. [Production Deployment](#production-deployment)
-4. [Troubleshooting](#troubleshooting)
+3. [Kubernetes Deployment](#kubernetes-deployment)
+4. [CI/CD Pipeline](#cicd-pipeline)
+5. [Monitoring & Observability](#monitoring--observability)
+6. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -12,40 +14,43 @@
 
 ### Prerequisites
 
-- **Java 17** or higher
+- **Java 21** or higher
 - **Maven 3.8+**
-- **MySQL 8.0+** (running locally or in Docker)
+- **Docker & Docker Compose** (for infrastructure services)
+- **Helm 3** (for Kubernetes deployment)
+- **kubectl** (for Kubernetes deployment)
 
 ### Step 1: Install Prerequisites
 
 #### macOS
 ```bash
-# Install Java 17
-brew install openjdk@17
+# Install Java 21
+brew install openjdk@21
 
 # Install Maven
 brew install maven
 
-# Install MySQL (optional - can use Docker)
-brew install mysql@8.0
+# Install Docker Desktop
+brew install --cask docker
 ```
 
 #### Linux (Ubuntu/Debian)
 ```bash
-# Install Java 17
+# Install Java 21
 sudo apt update
-sudo apt install openjdk-17-jdk maven -y
+sudo apt install openjdk-21-jdk maven -y
 
-# Install MySQL (optional)
-sudo apt install mysql-server -y
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
 ```
 
 #### Windows
 ```bash
 # Download and install from:
-# Java: https://adoptium.net/temurin/releases/?version=17
+# Java: https://adoptium.net/temurin/releases/?version=21
 # Maven: https://maven.apache.org/download.cgi
-# MySQL: https://dev.mysql.com/downloads/mysql/
+# Docker Desktop: https://www.docker.com/products/docker-desktop/
 ```
 
 ### Step 2: Clone Repository
@@ -55,109 +60,75 @@ git clone https://github.com/gallantsuri1/miniurl.git
 cd miniurl
 ```
 
-### Step 3: Configure Environment
-
-#### Option A: Using .env file (Recommended)
+### Step 3: Start Infrastructure (Docker)
 
 ```bash
-# Copy example environment file
-cp .env.example .env
+# Start all infrastructure services (Eureka, Kafka, Redis, MySQL)
+docker-compose up -d
 
-# Edit .env file with your settings
-nano .env
+# Wait for services to be ready (60 seconds)
+sleep 60
+
+# Verify services
+docker-compose ps
 ```
 
-**Required settings in `.env`:**
-```bash
-# JWT Secret (REQUIRED - generate a new one)
-APP_JWT_SECRET=YourSecureSecretKeyGeneratedWithOpensslRandBase6464
-
-# Database Configuration
-SPRING_DATASOURCE_URL=jdbc:mysql://localhost:3306/miniurldb?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-SPRING_DATASOURCE_USERNAME=root
-SPRING_DATASOURCE_PASSWORD=your_mysql_password
-
-# Application Base URL
-APP_BASE_URL=http://localhost:8080
-```
-
-#### Option B: Using MySQL in Docker
-
-```bash
-# Start MySQL container
-docker run -d \
-  --name miniurl-mysql \
-  -e MYSQL_ROOT_PASSWORD=rootpass \
-  -e MYSQL_DATABASE=miniurldb \
-  -p 3306:3306 \
-  mysql:8.0
-
-# Wait for MySQL to be ready (30 seconds)
-sleep 30
-```
-
-### Step 4: Initialize Database
-
-```bash
-# Run database initialization script
-mysql -u root -p < scripts/init-db.sql
-```
-
-### Step 5: Build Application
+### Step 4: Build Application
 
 ```bash
 # Clean and package (skip tests for faster build)
-mvn clean package -DskipTests
+mvn clean install -DskipTests
 
 # Or build with tests
-mvn clean package
+mvn clean install
 ```
 
-### Step 6: Run Application
+### Step 5: Run Services
 
-#### Option A: Run JAR directly
+**Order of startup (critical for service discovery):**
+
+1. **Eureka Server** (Service Discovery)
+2. **Identity Service** (Auth)
+3. **URL Service** (URL Management)
+4. **Feature Service** (Feature Flags)
+5. **API Gateway** (Routing)
+6. **Redirect Service** (Hot Path)
+7. **Notification Service** (Email)
+8. **Analytics Service** (Click Tracking)
 
 ```bash
-# Set environment variables and run
-export APP_JWT_SECRET="YourSecureSecretKeyGeneratedWithOpensslRandBase6464"
-java -jar target/miniurl-api-1.0.0.jar --spring.profiles.active=dev
+# Terminal 1: Eureka Server
+mvn spring-boot:run -pl eureka-server
+
+# Terminal 2: Identity Service
+mvn spring-boot:run -pl identity-service
+
+# Terminal 3: URL Service
+mvn spring-boot:run -pl url-service
+
+# Terminal 4: Feature Service
+mvn spring-boot:run -pl feature-service
+
+# Terminal 5: API Gateway
+mvn spring-boot:run -pl api-gateway
+
+# Terminal 6: Redirect Service
+mvn spring-boot:run -pl redirect-service
+
+# Terminal 7: Notification Service
+mvn spring-boot:run -pl notification-service
+
+# Terminal 8: Analytics Service
+mvn spring-boot:run -pl analytics-service
 ```
 
-#### Option B: Run with Maven
+### Step 6: Access Application
 
-```bash
-# Run with development profile
-mvn spring-boot:run -Dspring-boot.run.profiles=dev \
-  -Dspring-boot.run.arguments="--app.jwt.secret=YourSecureSecretKey"
-```
-
-#### Option C: Run with Docker Compose (All-in-one)
-
-```bash
-# Start both MySQL and application
-docker compose up -d
-
-# View logs
-docker compose logs -f app
-
-# Stop services
-docker compose down
-```
-
-### Step 7: Access Application
-
-- **Web Interface**: http://localhost:8080
-- **Swagger API Docs**: http://localhost:8080/swagger-ui.html (dev profile only)
-- **Health Check**: http://localhost:8080/api/health
-
-### Default Credentials
-
-```
-Username: <YOUR_ADMIN_USERNAME> (configured in scripts/init-db.sql)
-Password: <YOUR_ADMIN_PASSWORD> (configured in scripts/init-db.sql)
-```
-
-**⚠️ IMPORTANT:** You MUST configure admin credentials in `scripts/init-db.sql` before first run, and change the password immediately after first login!
+- **API Gateway**: http://localhost:8080
+- **Swagger API Docs**: http://localhost:8080/swagger-ui.html
+- **Eureka Dashboard**: http://localhost:8761
+- **Prometheus**: http://localhost:9090
+- **Grafana**: http://localhost:3000 (admin/admin123)
 
 ---
 
@@ -166,7 +137,6 @@ Password: <YOUR_ADMIN_PASSWORD> (configured in scripts/init-db.sql)
 ### Prerequisites
 
 - **Docker** and **Docker Compose** installed
-- **Port 8080** available (or configure custom port)
 - **Persistent storage** for MySQL data
 
 ### Step 1: Prepare Server
@@ -199,16 +169,13 @@ echo "APP_JWT_SECRET=$(openssl rand -base64 64)" >> .env
 nano .env
 ```
 
-**Required `.env` settings for home server:**
+**Required `.env` settings:**
 
 ```bash
 # ===========================================
 # DATABASE CONFIGURATION
 # ===========================================
 MYSQL_ROOT_PASSWORD=YourSecureMySQLRootPassword123!
-MYSQL_DATABASE=miniurldb
-MYSQL_USER=miniurluser
-MYSQL_PASSWORD=YourSecureMySQLUserPassword456!
 
 # ===========================================
 # JWT CONFIGURATION (REQUIRED)
@@ -218,28 +185,13 @@ APP_JWT_SECRET=YourSecureSecretKeyGeneratedWithOpensslRandBase6464
 # ===========================================
 # APPLICATION CONFIGURATION
 # ===========================================
-# Use your home server's IP or hostname
 APP_BASE_URL=http://your-home-server-ip:8080
-# Example: APP_BASE_URL=http://192.168.1.100:8080
-# Or: APP_BASE_URL=http://homenas.local:8080
-
-# Server port
-SERVER_PORT=8080
-APP_PORT=8080
-
-# ===========================================
-# SMTP CONFIGURATION (Optional - for email verification)
-# ===========================================
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your-email@gmail.com
-SMTP_PASSWORD=your-app-password
 ```
 
 ### Step 4: Start Services
 
 ```bash
-# Start all services (MySQL + Application)
+# Start all services
 docker compose up -d
 
 # View startup logs
@@ -256,272 +208,244 @@ docker compose ps
 curl http://localhost:8080/api/health
 
 # Check application logs
-docker compose logs app
+docker compose logs api-gateway
 
-# Check MySQL logs
-docker compose logs mysql
-```
-
-### Step 6: Access Application
-
-From any device on your network:
-```
-http://your-home-server-ip:8080
-```
-
-Examples:
-- `http://192.168.1.100:8080`
-- `http://homenas.local:8080`
-
-### Managing Docker Services
-
-```bash
-# View logs
-docker compose logs -f app
-docker compose logs -f mysql
-
-# Restart services
-docker compose restart app
-docker compose restart mysql
-
-# Stop services
-docker compose down
-
-# Stop and remove volumes (WARNING: deletes data!)
-docker compose down -v
-
-# Update application
-git pull
-docker compose down
-docker compose build --no-cache app
-docker compose up -d
-```
-
-### Backup Database
-
-```bash
-# Create backup
-docker exec miniurl-mysql mysqldump -u root -pMyURLRootPass2024! miniurldb > backup-$(date +%Y%m%d).sql
-
-# Restore backup
-docker exec -i miniurl-mysql mysql -u root -pMyURLRootPass2024! miniurldb < backup-20260329.sql
+# Check Eureka logs
+docker compose logs eureka-server
 ```
 
 ---
 
-## Production Deployment
+## Kubernetes Deployment with Helm
 
-### Additional Security Measures
+The project includes a Helm chart at `helm/miniurl/` that deploys all 8 microservices. Infrastructure (MySQL, Kafka, Redis) runs via Docker Compose locally or separately on the server.
 
-1. **Enable HTTPS** with reverse proxy (Nginx/Traefik)
-2. **Use production profile** (`prod`)
-3. **Disable Swagger/OpenAPI**
-4. **Configure firewall rules**
-5. **Set up monitoring**
+### Chart Structure
 
-### Docker Compose for Production
-
-```yaml
-# docker-compose.prod.yml
-version: '3.8'
-
-services:
-  app:
-    build: .
-    environment:
-      - SPRING_PROFILES_ACTIVE=prod
-      - APP_JWT_SECRET=${APP_JWT_SECRET}
-      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/miniurldb
-      - SPRING_DATASOURCE_USERNAME=${MYSQL_USER}
-      - SPRING_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
-    ports:
-      - "8080:8080"
-    depends_on:
-      - mysql
-    restart: unless-stopped
-
-  mysql:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
-      - MYSQL_DATABASE=miniurldb
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-    volumes:
-      - mysql-data:/var/lib/mysql
-    restart: unless-stopped
-
-volumes:
-  mysql-data:
+```
+helm/miniurl/
+  Chart.yaml
+  values.yaml          # defaults (ghcr.io images, prod config)
+  values-dev.yaml      # local dev overrides (1 replica, local images)
+  values-prod.yaml     # prod overrides (replicas, HPA)
+  templates/
+    configmap.yaml
+    deployment.yaml    # single template, iterates all services
+    service.yaml
+    hpa.yaml
 ```
 
-### Deploy with Production Profile
+### Dev Deployment (Local — Minikube/Kind)
+
+Start infrastructure, build images, and deploy with Helm:
 
 ```bash
-# Start with production configuration
-docker compose -f docker-compose.prod.yml up -d
+# Terminal 1: Start infrastructure
+docker compose up -d
 
-# Verify production mode (Swagger should be disabled)
-curl http://localhost:8080/swagger-ui.html
-# Should return 404 or redirect to login
+# Terminal 2: Start K8s cluster and deploy
+minikube start
+eval $(minikube docker-env)
+docker compose build
+helm install miniurl ./helm/miniurl --values ./helm/miniurl/values-dev.yaml
+
+# Verify
+kubectl -n miniurl get pods
+minikube service -n miniurl api-gateway
 ```
+
+### Prod Deployment (Home Server)
+
+A **self-hosted GitHub Actions runner** on the server handles automated deployment. Manual deploy:
+
+```bash
+# Prerequisites on the server
+# Install tools
+sudo apt install docker.io
+curl -fsSL https://get.helm.sh/helm-v3.14.0-linux-amd64.tar.gz | tar xz && sudo mv linux-amd64/helm /usr/local/bin/
+curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl" && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+
+# Add self-hosted runner (one-time setup)
+# Go to: https://github.com/gallantsuri1/miniurl-api/settings/actions/runners
+# Click "New self-hosted runner", choose Linux, run the commands
+# Register as a service:
+sudo ./svc.sh install
+sudo ./svc.sh start
+
+# Manual deploy (if not using CI)
+helm upgrade --install miniurl ./helm/miniurl \
+  --values ./helm/miniurl/values-prod.yaml \
+  --namespace miniurl --create-namespace \
+  --atomic --timeout 5m
+```
+
+### Automated Deploy (CI/CD)
+
+1. Merge PR to `main` → CI builds Docker images on GitHub runners
+2. Images pushed to `ghcr.io/...:latest` + Docker Hub
+3. Self-hosted runner on the server picks up the `deploy-to-kubernetes` job
+4. Runs `helm upgrade --install --atomic` with `values-prod.yaml`
+5. On failure, Helm auto-rolls back
+
+### Verify Deployment
+
+```bash
+# Check all pods
+kubectl -n miniurl get pods
+
+# Check all services
+kubectl -n miniurl get svc
+
+# Check Eureka dashboard
+kubectl -n miniurl port-forward svc/eureka-server 8761:8761
+open http://localhost:8761
+
+# Check API Gateway
+curl http://api.miniurl.com/api/health
+```
+
+---
+
+## CI/CD Pipeline
+
+### GitHub Actions Workflows
+
+The project includes three workflows:
+
+1. **PR Validation** (`.github/workflows/pr-validation.yml`)
+   - Runs on pull requests to `main`
+   - Builds, runs tests
+   - Pushes Docker images to ghcr.io (`pr-<number>`) and Docker Hub (SNAPSHOT version)
+
+2. **Main Pipeline** (`.github/workflows/main-pipeline.yml`)
+   - Runs on push/merge to `main`
+   - Builds, runs tests
+   - Pushes Docker images to ghcr.io (`latest`, `sha-<commit>`, `main`) and Docker Hub (release version)
+   - **Auto-deploys** via a self-hosted runner on the server using `helm upgrade --install`
+   - Auto-bumps patch version and commits `[skip ci]`
+
+3. **Release** (`.github/workflows/release.yml`)
+   - Triggered by `v*` tags or manual dispatch
+   - Pushes to ghcr.io and Docker Hub with version tags
+
+### Deploy Flow
+
+```
+Push/merge to main → Build & test → Push Docker images
+                                       ↓
+                      Self-hosted runner picks up job
+                                       ↓
+                      helm upgrade --install --atomic
+                                       ↓
+                      Verify rollouts → Slack notification
+```
+
+### Required GitHub Secrets
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKER_USER` | Docker Hub username |
+| `DOCKER_API_TOKEN` | Docker Hub API token |
+| `SLACK_WEBHOOK_URL` | Slack webhook for deploy notifications |
+
+### Self-Hosted Runner Setup
+
+The deploy job requires a self-hosted runner on the server with these tools:
+
+```bash
+sudo apt install docker.io
+sudo snap install helm --classic
+sudo snap install kubectl --classic
+```
+
+To add the runner:
+1. Go to repo **Settings → Actions → Runners → Add runner**
+2. Follow the Linux instructions
+3. Install as a service: `sudo ./svc.sh install && sudo ./svc.sh start`
+
+### Version Management
+
+- **Development**: `1.0.0-SNAPSHOT` — all PRs and local builds
+- **Main merge**: Auto-bumps patch → `1.0.1-SNAPSHOT`
+- **Release**: `mvn release:prepare` creates tag `v1.0.0` → `mvn release:perform` builds release
+
+---
+
+## Monitoring & Observability
+
+### Prometheus
+
+- **Endpoint**: `http://prometheus.miniurl.svc.cluster.local:9090`
+- **Metrics**: `/actuator/prometheus` from all services
+
+### Grafana
+
+- **Endpoint**: `http://grafana.miniurl.svc.cluster.local:3000`
+- **Credentials**: `admin/admin123`
+- **Dashboards**: Spring Boot metrics, Kubernetes metrics
+
+### ELK Stack
+
+- **Elasticsearch**: `http://elasticsearch.miniurl.svc.cluster.local:9200`
+- **Kibana**: `http://kibana.miniurl.svc.cluster.local:5601`
+- **Log Collection**: Kafka topics `notifications`, `clicks`
 
 ---
 
 ## Troubleshooting
 
-### Application Won't Start
+### Common Issues
 
-#### Error: JWT secret must be changed from default
+#### Pod CrashLoopBackOff
 
-**Solution:**
-```bash
-# Generate new JWT secret
-export APP_JWT_SECRET=$(openssl rand -base64 64)
-
-# Restart application
-docker compose restart app
-```
-
-#### Error: Cannot connect to MySQL
-
-**Solution:**
-```bash
-# Check MySQL is running
-docker compose ps mysql
-
-# View MySQL logs
-docker compose logs mysql
-
-# Wait for MySQL to be ready (takes ~30 seconds)
-sleep 30
-
-# Restart application
-docker compose restart app
-```
-
-#### Error: Port 8080 already in use
-
-**Solution:**
-```bash
-# Find process using port 8080
-lsof -i :8080
-
-# Kill the process
-kill -9 <PID>
-
-# Or change port in .env
-SERVER_PORT=8081
-APP_PORT=8081
-```
-
-### Database Issues
-
-#### Error: Database doesn't exist
-
-**Solution:**
-```bash
-# Initialize database
-docker exec -i miniurl-mysql mysql -u root -pYourRootPassword < scripts/init-db.sql
-```
-
-#### Error: Access denied for user
-
-**Solution:**
-```bash
-# Check credentials in .env match docker-compose.yml
-# Reset MySQL user
-docker exec -it miniurl-mysql mysql -u root -pYourRootPassword
-
-# In MySQL prompt:
-CREATE USER 'miniurluser'@'%' IDENTIFIED BY 'YourPassword';
-GRANT ALL PRIVILEGES ON miniurldb.* TO 'miniurluser'@'%';
-FLUSH PRIVILEGES;
-```
-
-### Login Issues
-
-#### Can't login with admin credentials
-
-**Solution:**
-```bash
-# Check if admin user exists
-docker exec -it miniurl-mysql mysql -u root -pYourRootPassword miniurldb
-
-# In MySQL:
-SELECT username, email FROM users WHERE username='<YOUR_ADMIN_USERNAME>';
-
-# If no admin user, check application logs
-docker compose logs app | grep "ADMIN USER"
-
-# Reset admin password (last resort)
-docker exec -it miniurl-mysql mysql -u root -pYourRootPassword miniurldb
-
-# In MySQL (generate your own BCrypt hash for your desired password):
-# Use an online BCrypt generator or Spring Security's BCryptPasswordEncoder
-UPDATE users SET password='<YOUR_BCRYPT_PASSWORD_HASH>' WHERE username='<YOUR_ADMIN_USERNAME>';
-```
-
-### Docker Issues
-
-#### Container keeps restarting
-
-**Solution:**
 ```bash
 # Check logs
-docker compose logs app
+kubectl -n miniurl logs <pod-name>
 
-# Check resource usage
-docker stats
+# Check events
+kubectl -n miniurl describe pod <pod-name>
 
-# Increase memory limit in docker-compose.yml
-# Add under app service:
-#   deploy:
-#     resources:
-#       limits:
-#         memory: 512M
+# Check resource limits
+kubectl -n miniurl top pods
 ```
 
-#### Volume permission issues
+#### Service Discovery Issues
 
-**Solution:**
 ```bash
-# Fix MySQL volume permissions
-docker volume ls
-docker volume rm miniurl_mysql-data
-docker compose up -d
+# Check Eureka
+kubectl -n miniurl get pods -l app=eureka-server
+
+# Check service endpoints
+kubectl -n miniurl get endpoints <service-name>
+
+# Check DNS
+kubectl -n miniurl exec -it <pod-name> -- nslookup <service-name>
 ```
 
-### Performance Issues
+#### Database Connection Failed
 
-#### Slow response times
-
-**Solution:**
 ```bash
-# Check resource usage
-docker stats
+# Check MySQL pods
+kubectl -n miniurl get pods -l app=mysql
 
-# Increase JVM heap size
-# Edit docker-compose.yml, add to app service:
-#   environment:
-#     - JAVA_OPTS=-Xms512m -Xmx1g
+# Check PVC
+kubectl -n miniurl get pvc
 
-# Restart
-docker compose restart app
+# Check secrets
+kubectl -n miniurl get secret db-secrets -o yaml
 ```
 
-#### High memory usage
+#### Kafka Connection Failed
 
-**Solution:**
 ```bash
-# Limit container memory in docker-compose.yml
-# Add under app service:
-#   deploy:
-#     resources:
-#       limits:
-#         memory: 512M
-#       reservations:
-#         memory: 256M
+# Check Kafka pods
+kubectl -n miniurl get pods -l app=kafka
+
+# Check Kafka service
+kubectl -n miniurl get svc kafka-service
+
+# Check Kafka logs
+kubectl -n miniurl logs <kafka-pod-name>
 ```
 
 ---
@@ -532,25 +456,17 @@ docker compose restart app
 
 ```bash
 # Local Development
-mvn clean package -DskipTests
-java -jar target/miniurl-api-1.0.0.jar --spring.profiles.active=dev
+mvn clean install -DskipTests
+docker-compose up -d
 
-# Docker Management
-docker compose up -d           # Start services
-docker compose down            # Stop services
-docker compose logs -f         # View logs
-docker compose ps              # Check status
-docker compose restart app     # Restart app
+# Kubernetes Management
+kubectl -n miniurl get pods
+kubectl -n miniurl rollout status deployment/api-gateway
+kubectl -n miniurl scale deployment/api-gateway --replicas=5
 
-# Database
-docker exec -it miniurl-mysql mysql -u root -p  # Access MySQL
-mysqldump -u root -p miniurldb > backup.sql     # Backup
-mysql -u root -p miniurldb < backup.sql         # Restore
-
-# Logs
-docker compose logs app
-docker compose logs mysql
-tail -f /tmp/miniurl.log
+# Monitoring
+kubectl -n miniurl port-forward svc/prometheus 9090:9090
+kubectl -n miniurl port-forward svc/grafana 3000:3000
 ```
 
 ### Environment Variables
@@ -559,17 +475,16 @@ tail -f /tmp/miniurl.log
 |----------|-------------|---------|----------|
 | `APP_JWT_SECRET` | JWT signing secret | None | ✅ Yes |
 | `APP_BASE_URL` | Application base URL | http://localhost:8080 | ✅ Yes |
-| `MYSQL_ROOT_PASSWORD` | MySQL root password | MyURLRootPass2024! | ✅ Yes |
-| `MYSQL_PASSWORD` | MySQL user password | MyURLUserPass2024! | ✅ Yes |
-| `SMTP_HOST` | SMTP server host | smtp.gmail.com | ❌ No |
-| `SMTP_PORT` | SMTP server port | 587 | ❌ No |
-| `SERVER_PORT` | Server port | 8080 | ❌ No |
+| `MYSQL_ROOT_PASSWORD` | MySQL root password | root | ✅ Yes |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka bootstrap servers | localhost:9092 | ✅ Yes |
+| `EUREKA_SERVER_URL` | Eureka server URL | http://localhost:8761/eureka/ | ✅ Yes |
 
 ---
 
 ## Support
 
 For issues or questions:
-1. Check logs: `docker compose logs app`
+1. Check logs: `kubectl -n miniurl logs <pod-name>`
 2. Review this guide
 3. Check application health: `curl http://localhost:8080/api/health`
+4. Check Eureka dashboard: `http://localhost:8761`
