@@ -5,7 +5,9 @@ import com.nimbusds.jose.jwk.JWKSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 
@@ -17,8 +19,10 @@ class KeyServiceTest {
     private KeyService keyService;
 
     @BeforeEach
-    void setUp() {
-        keyService = new KeyService();
+    void setUp(@TempDir Path tempDir) {
+        String privPath = tempDir.resolve("private.pem").toString();
+        String pubPath = tempDir.resolve("public.pem").toString();
+        keyService = new KeyService(privPath, pubPath, "test-key-id");
         keyService.init();
     }
 
@@ -60,5 +64,25 @@ class KeyServiceTest {
         PublicKey publicKey = keyService.getPublicKey();
         assertNotNull(publicKey);
         assertEquals("RSA", publicKey.getAlgorithm());
+    }
+
+    @Test
+    @DisplayName("keys persist across restarts (re-init loads from disk)")
+    void keysPersistAcrossRestarts(@TempDir Path tempDir) {
+        String privPath = tempDir.resolve("persist-private.pem").toString();
+        String pubPath = tempDir.resolve("persist-public.pem").toString();
+
+        // First "startup" — generates and saves keys
+        KeyService firstInstance = new KeyService(privPath, pubPath, "persist-key");
+        firstInstance.init();
+        PublicKey firstPublicKey = firstInstance.getPublicKey();
+
+        // Second "startup" — should load the same keys from disk
+        KeyService secondInstance = new KeyService(privPath, pubPath, "persist-key");
+        secondInstance.init();
+        PublicKey secondPublicKey = secondInstance.getPublicKey();
+
+        assertEquals(firstPublicKey, secondPublicKey,
+                "Keys should be identical across restarts");
     }
 }

@@ -16,7 +16,7 @@ spring:
         - id: identity-service
           uri: lb://identity-service
           predicates:
-            - Path=/api/auth/**, /api/profile/**, /api/admin/users/**
+            - Path=/api/auth/**, /api/profile/**, /api/admin/users/**, /api/health
           filters:
             - name: RequestRateLimiter
               args:

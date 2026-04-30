@@ -3,6 +3,8 @@ package com.miniurl.redirect;
 import com.miniurl.common.dto.ClickEvent;
 import com.miniurl.redirect.producer.ClickEventProducer;
 import com.miniurl.redirect.service.RedirectService;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,7 @@ import reactor.test.StepVerifier;
 
 import java.time.LocalDateTime;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -36,12 +39,14 @@ class RedirectServiceTest {
     @Mock
     private ClickEventProducer clickEventProducer;
 
+    private MeterRegistry meterRegistry;
     private RedirectService redirectService;
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
-        redirectService = new RedirectService(redisTemplate, webClient, clickEventProducer);
+        redirectService = new RedirectService(redisTemplate, webClient, clickEventProducer, meterRegistry);
     }
 
     @Test
@@ -161,5 +166,206 @@ class RedirectServiceTest {
                 .verifyComplete();
 
         verify(redisTemplate, times(1)).opsForValue();
+    }
+
+    // -----------------------------------------------------------------------
+    // P0-1 Fix: Redis failure scenarios
+    // -----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("resolveUrl falls back to URL service when Redis get() errors")
+    void resolveUrlRedisGetErrorFallsBackToUrlService() {
+        when(valueOps.get("url:cache:err1"))
+                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+        when(valueOps.set(eq("url:cache:err1"), eq("https://from-url-service.com"), any()))
+                .thenReturn(Mono.just(true));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "err1")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("https://from-url-service.com"));
+
+        StepVerifier.create(redirectService.resolveUrl("err1"))
+                .expectNext("https://from-url-service.com")
+                .verifyComplete();
+
+        // Verify URL service was called as fallback
+        verify(webClient).get();
+        // Verify cache was populated after fallback
+        verify(valueOps).set(eq("url:cache:err1"), eq("https://from-url-service.com"), any());
+    }
+
+    @Test
+    @DisplayName("resolveUrl returns URL even when Redis set() fails after URL service fallback")
+    void resolveUrlRedisSetErrorStillReturnsUrl() {
+        when(valueOps.get("url:cache:err2"))
+                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+        when(valueOps.set(eq("url:cache:err2"), eq("https://resolved-url.com"), any()))
+                .thenReturn(Mono.error(new RuntimeException("Redis write failed")));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "err2")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("https://resolved-url.com"));
+
+        // Should still return the URL even though caching failed
+        StepVerifier.create(redirectService.resolveUrl("err2"))
+                .expectNext("https://resolved-url.com")
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("resolveUrl returns empty when Redis errors AND URL service returns empty")
+    void resolveUrlRedisErrorAndUrlServiceEmpty() {
+        when(valueOps.get("url:cache:err3"))
+                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "err3")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.empty());
+
+        StepVerifier.create(redirectService.resolveUrl("err3"))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("resolveUrl returns empty when Redis errors AND URL service errors")
+    void resolveUrlRedisErrorAndUrlServiceError() {
+        when(valueOps.get("url:cache:err4"))
+                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "err4")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.error(new RuntimeException("URL service down")));
+
+        StepVerifier.create(redirectService.resolveUrl("err4"))
+                .verifyComplete();
+    }
+
+    @Test
+    @DisplayName("resolveUrl cache hit still works when Redis is healthy (regression check)")
+    void resolveUrlCacheHitStillWorks() {
+        when(valueOps.get("url:cache:healthy")).thenReturn(Mono.just("https://cached-url.com"));
+
+        StepVerifier.create(redirectService.resolveUrl("healthy"))
+                .expectNext("https://cached-url.com")
+                .verifyComplete();
+
+        // URL service should NOT be called on cache hit
+        verify(webClient, never()).get();
+    }
+
+    @Test
+    @DisplayName("resolveUrl cache miss with Redis set error still returns URL (regression check)")
+    void resolveUrlCacheMissSetErrorStillReturnsUrl() {
+        when(valueOps.get("url:cache:miss1")).thenReturn(Mono.empty());
+        when(valueOps.set(eq("url:cache:miss1"), eq("https://miss-url.com"), any()))
+                .thenReturn(Mono.error(new RuntimeException("Redis write failed")));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "miss1")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("https://miss-url.com"));
+
+        StepVerifier.create(redirectService.resolveUrl("miss1"))
+                .expectNext("https://miss-url.com")
+                .verifyComplete();
+    }
+
+    // -----------------------------------------------------------------------
+    // Custom Metric: redirect_redis_fallback_total
+    // -----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("redirect_redis_fallback_total counter increments on Redis get() error")
+    void redisFallbackCounterIncrementsOnRedisGetError() {
+        when(valueOps.get("url:cache:fallback1"))
+                .thenReturn(Mono.error(new RuntimeException("Redis connection refused")));
+        when(valueOps.set(eq("url:cache:fallback1"), eq("https://from-url-service.com"), any()))
+                .thenReturn(Mono.just(true));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "fallback1")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("https://from-url-service.com"));
+
+        StepVerifier.create(redirectService.resolveUrl("fallback1"))
+                .expectNext("https://from-url-service.com")
+                .verifyComplete();
+
+        double count = meterRegistry.get("redirect_redis_fallback_total")
+                .tag("reason", "error")
+                .counter()
+                .count();
+        assertEquals(1.0, count, "Counter should increment once on Redis get() error");
+    }
+
+    @Test
+    @DisplayName("redirect_redis_fallback_total counter does NOT increment on cache hit")
+    void redisFallbackCounterDoesNotIncrementOnCacheHit() {
+        when(valueOps.get("url:cache:healthy2")).thenReturn(Mono.just("https://cached-url.com"));
+
+        StepVerifier.create(redirectService.resolveUrl("healthy2"))
+                .expectNext("https://cached-url.com")
+                .verifyComplete();
+
+        double count = meterRegistry.get("redirect_redis_fallback_total")
+                .tag("reason", "error")
+                .counter()
+                .count();
+        assertEquals(0.0, count, "Counter should NOT increment on cache hit");
+    }
+
+    @Test
+    @DisplayName("redirect_redis_fallback_total counter does NOT increment on cache miss (no Redis error)")
+    void redisFallbackCounterDoesNotIncrementOnCacheMiss() {
+        when(valueOps.get("url:cache:miss2")).thenReturn(Mono.empty());
+        when(valueOps.set(eq("url:cache:miss2"), eq("https://miss-url.com"), any()))
+                .thenReturn(Mono.just(true));
+
+        WebClient.RequestHeadersUriSpec uriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
+        WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+
+        when(webClient.get()).thenReturn(uriSpec);
+        when(uriSpec.uri("/internal/urls/resolve/{code}", "miss2")).thenReturn(headersSpec);
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("https://miss-url.com"));
+
+        StepVerifier.create(redirectService.resolveUrl("miss2"))
+                .expectNext("https://miss-url.com")
+                .verifyComplete();
+
+        double count = meterRegistry.get("redirect_redis_fallback_total")
+                .tag("reason", "error")
+                .counter()
+                .count();
+        assertEquals(0.0, count, "Counter should NOT increment on normal cache miss (no Redis error)");
     }
 }

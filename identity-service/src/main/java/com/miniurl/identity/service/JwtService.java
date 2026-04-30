@@ -50,4 +50,18 @@ public class JwtService {
                 .signWith(privateKey)
                 .compact();
     }
+
+    /**
+     * Extracts the username (subject) from a JWT token.
+     * Used for operations that must identify the caller from their token,
+     * such as delete-account (prevents userId spoofing from request body).
+     */
+    public String extractUsername(String token) {
+        return Jwts.parser()
+                .verifyWith(keyService.getPublicKey())
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getSubject();
+    }
 }

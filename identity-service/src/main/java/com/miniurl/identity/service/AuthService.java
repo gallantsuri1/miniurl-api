@@ -224,11 +224,11 @@ public class AuthService {
         // Send congratulations email (NO verification email needed for invited users)
         try {
             NotificationEvent event = NotificationEvent.builder()
-                .eventType("REGISTRATION_CONGRATS")
+                .eventType("CONGRATULATIONS")
                 .toEmail(email)
                 .payload(java.util.Map.of("firstName", firstName))
                 .build();
-            outboxService.saveEvent("USER", String.valueOf(user.getId()), "REGISTRATION_CONGRATS", event);
+            outboxService.saveEvent("USER", String.valueOf(user.getId()), "CONGRATULATIONS", event);
             logger.info("Congratulations email event saved to outbox for: {} ({})", email, username);
         } catch (Exception e) {
             logger.warn("Failed to send congratulations email event to {}: {}", email, e.getMessage());
@@ -327,12 +327,25 @@ public class AuthService {
                     minutesLeft, minutesLeft == 1 ? "minute" : "minutes")
             );
         }
-        
-        User user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new ResourceNotFoundException("User not found with email: " + email));
+
+        // Track request for rate limiting BEFORE checking if user exists
+        // This prevents timing-based enumeration
+        passwordResetRequests.put(email.toLowerCase(), LocalDateTime.now());
+
+        // Anti-enumeration: don't reveal whether the email exists
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        if (userOpt.isEmpty()) {
+            logger.info("Password reset requested for non-existent email: {}", email);
+            cleanupOldRateLimitEntries();
+            return;
+        }
+
+        User user = userOpt.get();
 
         if (user.getStatus() != UserStatus.ACTIVE) {
-            throw new UnauthorizedException("User account is not active");
+            logger.info("Password reset requested for inactive account: {}", email);
+            cleanupOldRateLimitEntries();
+            return;
         }
 
         // Create password reset token
@@ -353,12 +366,9 @@ public class AuthService {
         } catch (Exception e) {
             logger.warn("Failed to send password reset email event to {}: {}", email, e.getMessage());
         }
-        
-        // Track request for rate limiting
-        passwordResetRequests.put(email.toLowerCase(), LocalDateTime.now());
 
         logger.info("Password reset requested for: {}", email);
-        
+
         // Cleanup old entries periodically
         cleanupOldRateLimitEntries();
     }

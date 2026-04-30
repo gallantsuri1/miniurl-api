@@ -61,15 +61,20 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // Development defaults
-        configuration.setAllowedOrigins(List.of(
-            "http://localhost:8080",
-            "http://127.0.0.1:8080",
-            "http://localhost:3000",
-            "http://127.0.0.1:3000"
-        ));
-        
+
+        // Read allowed origins from environment variable (comma-separated).
+        // Falls back to localhost defaults for development.
+        String corsOriginsEnv = System.getenv("APP_CORS_ALLOWED_ORIGINS");
+        if (corsOriginsEnv == null || corsOriginsEnv.isBlank()) {
+            corsOriginsEnv = "http://localhost:8080,http://127.0.0.1:8080,http://localhost:3000,http://127.0.0.1:3000";
+        }
+
+        List<String> allowedOrigins = Arrays.stream(corsOriginsEnv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+
+        configuration.setAllowedOrigins(allowedOrigins);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "X-Requested-With", "Accept", "Origin"));
         configuration.setAllowCredentials(true);

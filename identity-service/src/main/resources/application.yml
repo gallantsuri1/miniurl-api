@@ -23,6 +23,12 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        # Dead Letter Queue: failed outbox events are sent to a DLQ topic
+        # instead of being retried indefinitely. The DLQ topic is consumed
+        # by a separate process for manual inspection and replay.
+        retries: 3
+        retry.backoff.ms: 1000
     consumer:
       group-id: identity-service-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -36,6 +42,17 @@ app:
   otp:
     expiry-minutes: 10
   name: ${APP_NAME:MyURL}
+
+# JWT RSA Key Configuration
+# Keys are persisted to disk so they survive restarts.
+# On first startup, keys are auto-generated and saved.
+# For production, generate keys externally and mount as secrets.
+jwt:
+  expiration-ms: 3600000
+  rsa:
+    private-key-path: ${JWT_RSA_PRIVATE_KEY_PATH:config/keys/private.pem}
+    public-key-path: ${JWT_RSA_PUBLIC_KEY_PATH:config/keys/public.pem}
+    key-id: ${JWT_RSA_KEY_ID:miniurl-rsa-key-1}
 
 management:
   endpoints:

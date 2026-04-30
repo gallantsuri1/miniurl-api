@@ -8,10 +8,13 @@ import com.miniurl.exception.AliasNotAvailableException;
 import com.miniurl.exception.ResourceNotFoundException;
 import com.miniurl.exception.UnauthorizedException;
 import com.miniurl.exception.UrlValidationException;
+import com.miniurl.url.client.RedirectServiceClient;
 import com.miniurl.url.entity.Url;
 import com.miniurl.url.repository.UrlRepository;
 import com.miniurl.url.util.Base62;
 import com.miniurl.url.util.SnowflakeIdGenerator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -31,6 +34,8 @@ import java.util.stream.Collectors;
 @Service
 public class UrlService {
 
+    private static final Logger log = LoggerFactory.getLogger(UrlService.class);
+
     private static final Set<String> BLOCKED_DOMAINS = Set.of(
         "localhost", "127.0.0.1", "0.0.0.0", "::1",
         "metadata.google.internal", "169.254.169.254",
@@ -41,6 +46,7 @@ public class UrlService {
     private final UrlUsageLimitService urlUsageLimitService;
     private final SnowflakeIdGenerator idGenerator;
     private final OutboxService outboxService;
+    private final RedirectServiceClient redirectServiceClient;
 
     @Value("${app.base-url}")
     private String baseUrl;
@@ -51,11 +57,13 @@ public class UrlService {
     public UrlService(UrlRepository urlRepository,
                       UrlUsageLimitService urlUsageLimitService,
                       SnowflakeIdGenerator idGenerator,
-                      OutboxService outboxService) {
+                      OutboxService outboxService,
+                      RedirectServiceClient redirectServiceClient) {
         this.urlRepository = urlRepository;
         this.urlUsageLimitService = urlUsageLimitService;
         this.idGenerator = idGenerator;
         this.outboxService = outboxService;
+        this.redirectServiceClient = redirectServiceClient;
     }
 
     private String generateUniqueShortCode() {
@@ -283,6 +291,13 @@ public class UrlService {
         outboxService.saveEvent("URL", String.valueOf(url.getId()), "URL_DELETED", event);
         
         urlRepository.delete(url);
+
+        try {
+            redirectServiceClient.invalidateCache(url.getShortCode());
+            log.debug("Cache invalidated for deleted URL: {}", url.getShortCode());
+        } catch (Exception e) {
+            log.warn("Failed to invalidate redirect cache for {}: {}", url.getShortCode(), e.getMessage());
+        }
     }
 
     public UrlResponse getUrlById(Long urlId, Long userId) {

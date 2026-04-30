@@ -3,24 +3,57 @@ package com.miniurl.url.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miniurl.url.entity.Outbox;
 import com.miniurl.url.repository.OutboxRepository;
-import lombok.RequiredArgsConstructor;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class OutboxRelay {
 
     private final OutboxRepository outboxRepository;
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
+
+    private static final int MAX_RETRY_ATTEMPTS = 3;
+    private static final long KAFKA_ACK_TIMEOUT_SECONDS = 10;
+
+    public OutboxRelay(OutboxRepository outboxRepository,
+                       KafkaTemplate<String, Object> kafkaTemplate,
+                       ObjectMapper objectMapper,
+                       MeterRegistry meterRegistry) {
+        this.outboxRepository = outboxRepository;
+        this.kafkaTemplate = kafkaTemplate;
+        this.objectMapper = objectMapper;
+
+        // Gauge: number of unprocessed outbox events
+        Gauge.builder("outbox_events_unprocessed", outboxRepository::countByProcessedFalse)
+                .description("Number of outbox events that have not yet been processed")
+                .register(meterRegistry);
+
+        // Gauge: age in seconds of the oldest unprocessed outbox event
+        Gauge.builder("outbox_events_age_seconds", () -> {
+                    LocalDateTime oldest = outboxRepository.findOldestUnprocessedCreatedAt();
+                    if (oldest == null) {
+                        return 0.0;
+                    }
+                    return (double) Duration.between(oldest, LocalDateTime.now()).getSeconds();
+                })
+                .description("Age in seconds of the oldest unprocessed outbox event")
+                .register(meterRegistry);
+    }
 
     @Scheduled(fixedDelay = 5000)
     @Transactional
@@ -34,26 +67,54 @@ public class OutboxRelay {
         log.debug("Processing {} pending outbox events in URL service", pendingEvents.size());
 
         for (Outbox event : pendingEvents) {
+            processEventWithRetry(event);
+        }
+    }
+
+    /**
+     * Processes a single outbox event with retry logic.
+     * Marks the event as processed ONLY after Kafka confirms receipt.
+     * Retries up to MAX_RETRY_ATTEMPTS times with the Kafka acknowledgment timeout.
+     * Consistent with identity-service OutboxRelay implementation.
+     */
+    @Transactional
+    public void processEventWithRetry(Outbox event) {
+        int attempt = 0;
+        while (attempt < MAX_RETRY_ATTEMPTS) {
+            attempt++;
             try {
                 String topic = determineTopic(event.getAggregateType());
                 Object payload = objectMapper.readValue(event.getPayload(), Object.class);
-                
-                kafkaTemplate.send(topic, event.getAggregateId(), payload)
-                    .whenComplete((result, ex) -> {
-                        if (ex == null) {
-                            log.debug("Successfully published event {} to topic {}", event.getType(), topic);
-                        } else {
-                            log.error("Failed to publish event {}: {}", event.getType(), ex.getMessage());
-                        }
-                    });
 
+                CompletableFuture<SendResult<String, Object>> future =
+                        kafkaTemplate.send(topic, event.getAggregateId(), payload);
+
+                // Block with timeout waiting for Kafka acknowledgment
+                SendResult<String, Object> result = future.get(KAFKA_ACK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+                // Kafka acknowledged — now safe to mark as processed
                 event.setProcessed(true);
                 event.setProcessedAt(LocalDateTime.now());
                 outboxRepository.save(event);
+
+                log.debug("Published event {} to topic {} (offset={}, partition={})",
+                        event.getType(), topic,
+                        result.getRecordMetadata().offset(),
+                        result.getRecordMetadata().partition());
+                return; // Success — exit retry loop
+
+            } catch (TimeoutException e) {
+                log.warn("Kafka ack timeout for event {} (attempt {}/{}): {}",
+                        event.getId(), attempt, MAX_RETRY_ATTEMPTS, e.getMessage());
             } catch (Exception e) {
-                log.error("Error processing outbox event {}: {}", event.getId(), e.getMessage());
+                log.error("Failed to publish event {} (attempt {}/{}): {}",
+                        event.getId(), attempt, MAX_RETRY_ATTEMPTS, e.getMessage());
             }
         }
+
+        // All retries exhausted — leave event unprocessed for next cycle
+        log.error("Exhausted all {} retry attempts for event {}. Will retry on next cycle.",
+                MAX_RETRY_ATTEMPTS, event.getId());
     }
 
     private String determineTopic(String aggregateType) {

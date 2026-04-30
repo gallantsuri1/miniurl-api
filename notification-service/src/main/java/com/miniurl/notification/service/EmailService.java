@@ -1,5 +1,7 @@
 package com.miniurl.notification.service;
 
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
@@ -50,6 +52,17 @@ public class EmailService {
         return context;
     }
 
+    /**
+     * Sends an email with Resilience4j retry and circuit breaker protection.
+     *
+     * Retry: Up to 3 attempts with exponential backoff (500ms → 1s → 2s).
+     * Circuit Breaker: Opens after 50% failure rate in a 10-call sliding window,
+     *   stays open for 30s, then transitions to half-open for probe calls.
+     * Fallback: Logs the failure and returns gracefully — SMTP failures never
+     *   propagate to the Kafka consumer, preventing consumer backpressure.
+     */
+    @CircuitBreaker(name = "emailService", fallbackMethod = "sendEmailFallback")
+    @Retry(name = "emailService", fallbackMethod = "sendEmailFallback")
     public void sendEmail(String eventType, String toEmail, String username, Map<String, Object> payload) {
         if (!isEmailConfigured()) {
             logger.warn("SMTP not configured. Skipping email {} for {}. Payload: {}", eventType, toEmail, payload);
@@ -127,7 +140,19 @@ public class EmailService {
             mailSender.send(message);
             logger.info("Email {} sent successfully to: {}", eventType, toEmail);
         } catch (Exception e) {
-            logger.error("Failed to send email {} to {}: {}", eventType, toEmail, e.getMessage());
+            // Let Resilience4j retry/circuit-breaker handle this
+            throw new RuntimeException("Failed to send email " + eventType + " to " + toEmail, e);
         }
+    }
+
+    /**
+     * Fallback method invoked when the circuit breaker is open or all retries are exhausted.
+     * Logs the failure and returns gracefully — never throws, so Kafka consumers are not blocked.
+     */
+    @SuppressWarnings("unused")
+    private void sendEmailFallback(String eventType, String toEmail, String username,
+                                   Map<String, Object> payload, Throwable t) {
+        logger.error("Email delivery failed for {} to {} after retries/circuit-breaker: {}",
+                eventType, toEmail, t.getMessage());
     }
 }

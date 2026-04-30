@@ -17,7 +17,7 @@ public class SecurityConfig {
             .csrf(ServerHttpSecurity.CsrfSpec::disable)
             .authorizeExchange(exchanges -> exchanges
                 // Public endpoints
-                .pathMatchers("/api/auth/**", "/api/features/public/**", "/r/{code}", "/actuator/**").permitAll()
+                .pathMatchers("/api/auth/**", "/api/features/public/**", "/api/health", "/r/{code}", "/actuator/**").permitAll()
                 // All other requests require authentication
                 .anyExchange().authenticated()
             )

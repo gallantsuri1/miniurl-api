@@ -7,6 +7,7 @@ import com.miniurl.dto.PageableRequest;
 import com.miniurl.dto.UrlResponse;
 import com.miniurl.url.service.UrlService;
 import com.miniurl.url.service.UrlUsageLimitService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,7 +25,7 @@ public class UrlController {
 
     @PostMapping
     public ResponseEntity<ApiResponse> createUrl(
-            @RequestBody CreateUrlRequest request,
+            @Valid @RequestBody CreateUrlRequest request,
             @RequestAttribute("userId") Long userId) {
         UrlResponse response = urlService.createUrl(request, userId);
         return ResponseEntity.ok(ApiResponse.success("URL created successfully", response));

@@ -13,7 +13,9 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
 import java.time.LocalDateTime;
 
 @Slf4j
@@ -37,6 +39,12 @@ public class RedirectController {
         
         return redirectService.resolveUrl(code)
             .flatMap(originalUrl -> {
+                // Validate redirect URL to prevent open redirect attacks
+                if (!isValidRedirectUrl(originalUrl)) {
+                    log.warn("Blocked redirect to potentially malicious URL: {}", originalUrl);
+                    return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).build());
+                }
+
                 // Async click event publishing
                 ClickEvent event = ClickEvent.builder()
                     .shortCode(code)
@@ -54,5 +62,39 @@ public class RedirectController {
                         .build());
             })
             .switchIfEmpty(Mono.error(new ResponseStatusException(HttpStatus.NOT_FOUND, "Short URL not found")));
+    }
+
+    /**
+     * Validate URL before redirect to prevent open redirect attacks.
+     * Only allows http: and https: protocols. Blocks javascript:, data:,
+     * vbscript:, file:, and any other non-http schemes.
+     * Ported from monolith RedirectController.isValidRedirectUrl().
+     */
+    private boolean isValidRedirectUrl(String url) {
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        try {
+            URL parsedUrl = new URL(url);
+            String protocol = parsedUrl.getProtocol();
+
+            // Only allow http and https
+            if (!"http".equalsIgnoreCase(protocol) && !"https".equalsIgnoreCase(protocol)) {
+                return false;
+            }
+
+            // Block dangerous protocols that could have bypassed creation validation
+            String lowerUrl = url.toLowerCase().trim();
+            if (lowerUrl.startsWith("javascript:") ||
+                lowerUrl.startsWith("data:") ||
+                lowerUrl.startsWith("vbscript:") ||
+                lowerUrl.startsWith("file:")) {
+                return false;
+            }
+
+            return true;
+        } catch (MalformedURLException e) {
+            return false;
+        }
     }
 }
