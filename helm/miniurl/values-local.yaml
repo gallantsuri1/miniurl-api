@@ -157,8 +157,8 @@ services:
       pullPolicy: Never
     ports:
       - name: http
-        containerPort: 8080
-        servicePort: 8080
+        containerPort: 8082
+        servicePort: 8082
     serviceType: ClusterIP
     hpa:
       enabled: false
@@ -169,13 +169,13 @@ services:
       liveness:
         httpGet:
           path: /actuator/health
-          port: 8080
+          port: 8082
         initialDelaySeconds: 30
         periodSeconds: 10
       readiness:
         httpGet:
           path: /actuator/health/readiness
-          port: 8080
+          port: 8082
         initialDelaySeconds: 15
         periodSeconds: 5
 
@@ -187,8 +187,8 @@ services:
       pullPolicy: Never
     ports:
       - name: http
-        containerPort: 8081
-        servicePort: 8081
+        containerPort: 8083
+        servicePort: 8083
     serviceType: ClusterIP
     hpa:
       enabled: false
@@ -199,13 +199,13 @@ services:
       liveness:
         httpGet:
           path: /actuator/health
-          port: 8081
+          port: 8083
         initialDelaySeconds: 60
         periodSeconds: 15
       readiness:
         httpGet:
           path: /actuator/health/readiness
-          port: 8081
+          port: 8083
         initialDelaySeconds: 30
         periodSeconds: 10
 
@@ -217,8 +217,8 @@ services:
       pullPolicy: Never
     ports:
       - name: http
-        containerPort: 8080
-        servicePort: 8080
+        containerPort: 8082
+        servicePort: 8082
     serviceType: ClusterIP
     hpa:
       enabled: false
@@ -229,13 +229,13 @@ services:
       liveness:
         httpGet:
           path: /actuator/health
-          port: 8080
+          port: 8082
         initialDelaySeconds: 60
         periodSeconds: 15
       readiness:
         httpGet:
           path: /actuator/health/readiness
-          port: 8080
+          port: 8082
         initialDelaySeconds: 30
         periodSeconds: 10
 
@@ -247,8 +247,8 @@ services:
       pullPolicy: Never
     ports:
       - name: http
-        containerPort: 8080
-        servicePort: 8080
+        containerPort: 8083
+        servicePort: 8083
     serviceType: ClusterIP
     hpa:
       enabled: false
