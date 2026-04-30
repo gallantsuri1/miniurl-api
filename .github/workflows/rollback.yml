@@ -18,12 +18,11 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   rollback:
     name: Rollback ${{ github.event.inputs.environment }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     environment:
       name: ${{ github.event.inputs.environment == 'prod' && 'production' || 'development' }}
 
@@ -31,25 +30,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Configure kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.29.0'
-
-      - name: Set up kubeconfig
+      - name: Preflight — verify runner tools and K3s access
         run: |
-          mkdir -p $HOME/.kube
-          if [ "${{ github.event.inputs.environment }}" = "prod" ]; then
-            echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          else
-            echo "${{ secrets.DEV_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          fi
-          chmod 600 $HOME/.kube/config
+          echo "=== Runner Preflight ==="
+          echo ""
+          echo "--- kubectl ---"
+          kubectl version --client 2>/dev/null || true
+          echo ""
+          echo "--- helm ---"
+          helm version --short 2>/dev/null || { echo "FATAL: helm not found"; exit 1; }
+          echo ""
+          echo "--- kubeconfig ---"
+          echo "KUBECONFIG: ${KUBECONFIG:-$HOME/.kube/config}"
+          echo "Current context: $(kubectl config current-context 2>/dev/null || echo 'NOT SET')"
+          echo ""
+          echo "--- cluster ---"
+          kubectl cluster-info 2>/dev/null || true
+          kubectl get nodes 2>/dev/null || { echo "FATAL: Cannot access K3s cluster"; exit 1; }
+          echo ""
+          echo "=== Preflight PASSED ==="
 
       - name: Show Helm history
         run: |
@@ -73,6 +72,7 @@ jobs:
 
       - name: Verify deployments
         run: |
+          kubectl -n miniurl get all
           for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
             echo "Checking ${service}..."
             kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
@@ -80,44 +80,17 @@ jobs:
 
       - name: Smoke test
         run: |
-          INGRESS_HOST="${{ github.event.inputs.environment == 'prod' && 'api.miniurl.com' || 'dev.api.miniurl.com' }}"
-          INGRESS_IP=$(kubectl -n miniurl get ingress miniurl-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-          if [ -n "$INGRESS_IP" ]; then
-            curl -fsS -H "Host: ${INGRESS_HOST}" "http://${INGRESS_IP}/api/health" || echo "WARN: Health check failed"
-          else
-            echo "INFO: No ingress IP, skipping smoke test"
+          GW_IP=$(kubectl -n miniurl get svc api-gateway -o jsonpath='{.spec.clusterIP}')
+          if [ -n "$GW_IP" ]; then
+            curl -fsS "http://${GW_IP}/actuator/health" || echo "WARN: Health check failed"
           fi
 
-      - name: Notify success
-        if: success()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "Rollback successful",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*MiniURL Rollback*\n\n*Environment:* `${{ github.event.inputs.environment }}`\n*New Revision:* `${{ steps.rollback.outputs.new_revision }}`\n*Status:* ✅ Success"
-                }
-              }]
-            }
-
-      - name: Notify failure
-        if: failure()
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "Rollback FAILED",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*MiniURL Rollback FAILED*\n\n*Environment:* `${{ github.event.inputs.environment }}`\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
-                }
-              }]
-            }
+      - name: Print rollback summary
+        run: |
+          echo "============================================"
+          echo "  Rollback Complete"
+          echo "============================================"
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "New Revision: ${{ steps.rollback.outputs.new_revision }}"
+          echo ""
+          helm history miniurl -n miniurl --max 5

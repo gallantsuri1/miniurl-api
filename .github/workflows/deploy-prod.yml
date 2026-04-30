@@ -16,13 +16,12 @@ on:
 permissions:
   contents: read
   packages: read
-  id-token: write
 
 jobs:
   # ── Phase 0: Pre-deployment validation ──────────────────────────
   preflight:
     name: Pre-flight Checks
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     environment:
       name: production
 
@@ -30,33 +29,32 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Helm lint
-        run: helm lint helm/miniurl
-
-      - name: Helm template validation
+      - name: Preflight — verify runner tools and K3s access
         run: |
+          echo "=== Runner Preflight ==="
+          echo ""
+          echo "--- kubectl ---"
+          kubectl version --client 2>/dev/null || true
+          echo ""
+          echo "--- helm ---"
+          helm version --short 2>/dev/null || { echo "FATAL: helm not found"; exit 1; }
+          echo ""
+          echo "--- kubeconfig ---"
+          echo "KUBECONFIG: ${KUBECONFIG:-$HOME/.kube/config}"
+          echo "Current context: $(kubectl config current-context 2>/dev/null || echo 'NOT SET')"
+          echo ""
+          echo "--- cluster ---"
+          kubectl cluster-info 2>/dev/null || true
+          kubectl get nodes 2>/dev/null || { echo "FATAL: Cannot access K3s cluster"; exit 1; }
+          echo ""
+          echo "=== Preflight PASSED ==="
+
+      - name: Helm lint & template validation
+        run: |
+          helm lint helm/miniurl
           helm template miniurl helm/miniurl \
-            -f helm/miniurl/values-prod.yaml \
+            -f helm/miniurl/values-home.yaml \
             --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" > /dev/null
-
-      - name: Configure kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'v1.29.0'
-
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
-      - name: Verify cluster connectivity
-        run: kubectl cluster-info
 
       - name: Capture current revision for rollback
         id: current
@@ -71,7 +69,7 @@ jobs:
   # ── Phase 1: Deploy canary at 10% ───────────────────────────────
   canary-10:
     name: Canary 10%
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     needs: preflight
     if: github.event.inputs.skip_canary != 'true'
     environment:
@@ -81,21 +79,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Deploy canary at 10%
         run: |
           helm upgrade --install miniurl ./helm/miniurl \
-            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-home.yaml \
             --values ./helm/miniurl/values-canary.yaml \
             --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
             --set canary.weight=10 \
@@ -110,20 +97,17 @@ jobs:
             kubectl -n miniurl rollout status "deployment/${deploy}" --timeout=120s || true
           done
 
-      - name: Wait for stabilization (60s)
-        run: sleep 60
-
-      - name: Check Prometheus alerts
+      - name: Wait for stabilization
         run: |
-          echo "Checking for firing alerts..."
-          # Placeholder: query Prometheus AlertManager API
-          # curl -s "$PROMETHEUS_URL/api/v1/alerts" | grep -c '"severity":"critical"'
-          echo "No critical alerts (Prometheus integration pending)"
+          echo "Waiting 60s for canary stabilization..."
+          sleep 60
+          kubectl -n miniurl get pods -l canary=true
+          kubectl -n miniurl top pods 2>/dev/null || echo "metrics-server may not be running"
 
   # ── Phase 2: Canary at 25% ──────────────────────────────────────
   canary-25:
     name: Canary 25%
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     needs: canary-10
     if: github.event.inputs.skip_canary != 'true'
     environment:
@@ -133,21 +117,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Bump canary to 25%
         run: |
           helm upgrade --install miniurl ./helm/miniurl \
-            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-home.yaml \
             --values ./helm/miniurl/values-canary.yaml \
             --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
             --set canary.weight=25 \
@@ -155,17 +128,16 @@ jobs:
             --timeout 5m \
             --wait
 
-      - name: Wait for stabilization (60s)
-        run: sleep 60
-
-      - name: Check Prometheus alerts
+      - name: Wait for stabilization
         run: |
-          echo "No critical alerts (Prometheus integration pending)"
+          echo "Waiting 60s for canary stabilization..."
+          sleep 60
+          kubectl -n miniurl get pods -l canary=true
 
   # ── Phase 3: Canary at 50% ──────────────────────────────────────
   canary-50:
     name: Canary 50%
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     needs: canary-25
     if: github.event.inputs.skip_canary != 'true'
     environment:
@@ -175,21 +147,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Bump canary to 50%
         run: |
           helm upgrade --install miniurl ./helm/miniurl \
-            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-home.yaml \
             --values ./helm/miniurl/values-canary.yaml \
             --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
             --set canary.weight=50 \
@@ -197,17 +158,16 @@ jobs:
             --timeout 5m \
             --wait
 
-      - name: Wait for stabilization (60s)
-        run: sleep 60
-
-      - name: Check Prometheus alerts
+      - name: Wait for stabilization
         run: |
-          echo "No critical alerts (Prometheus integration pending)"
+          echo "Waiting 60s for canary stabilization..."
+          sleep 60
+          kubectl -n miniurl get pods -l canary=true
 
   # ── Phase 4: Full promotion (100%) ──────────────────────────────
   promote:
     name: Promote to 100%
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     needs: canary-50
     if: github.event.inputs.skip_canary != 'true'
     environment:
@@ -217,21 +177,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Promote — disable canary, deploy stable
         run: |
           helm upgrade --install miniurl ./helm/miniurl \
-            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-home.yaml \
             --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
             --set canary.enabled=false \
             --namespace miniurl \
@@ -240,6 +189,7 @@ jobs:
 
       - name: Verify stable deployments
         run: |
+          kubectl -n miniurl get all
           for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
             echo "Checking ${service}..."
             kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
@@ -254,31 +204,28 @@ jobs:
 
       - name: Smoke test
         run: |
-          INGRESS_IP=$(kubectl -n miniurl get ingress miniurl-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-          if [ -n "$INGRESS_IP" ]; then
-            curl -fsS -H "Host: api.miniurl.com" "http://${INGRESS_IP}/api/health" || echo "WARN: Health check failed"
+          GW_IP=$(kubectl -n miniurl get svc api-gateway -o jsonpath='{.spec.clusterIP}')
+          if [ -n "$GW_IP" ]; then
+            curl -fsS "http://${GW_IP}/actuator/health" || echo "WARN: Health check failed"
+            curl -fsS "http://${GW_IP}/.well-known/jwks.json" | head -c 100 || echo "WARN: JWKS failed"
           fi
 
-      - name: Notify success
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "Production deployment successful",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*MiniURL Production Deployment*\n\n*Tag:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n*Status:* ✅ Promoted to 100%"
-                }
-              }]
-            }
+      - name: Print access info
+        run: |
+          echo "============================================"
+          echo "  Production Promotion Complete"
+          echo "============================================"
+          echo "Tag: ${{ github.event.inputs.image_tag }}"
+          echo ""
+          echo "Services:"
+          kubectl -n miniurl get svc
+          echo ""
+          echo "Access: http://miniurl.local/api/health"
 
   # ── Direct deploy (skip canary — emergency) ─────────────────────
   deploy-direct:
     name: Direct Deploy (No Canary)
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, home-server]
     needs: preflight
     if: github.event.inputs.skip_canary == 'true'
     environment:
@@ -288,68 +235,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Helm
-        uses: azure/setup-helm@v4
-        with:
-          version: 'v3.14.0'
-
-      - name: Set up kubeconfig
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
-
       - name: Deploy directly
         run: |
           helm upgrade --install miniurl ./helm/miniurl \
-            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-home.yaml \
             --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
             --set canary.enabled=false \
             --namespace miniurl \
             --timeout 5m \
-            --wait
+            --wait \
+            --atomic
 
       - name: Verify deployments
         run: |
+          kubectl -n miniurl get all
           for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
             kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
           done
 
-      - name: Notify
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "Production deployment (direct)",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*MiniURL Production Deployment (DIRECT)*\n\n*Tag:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n*Status:* ✅ Deployed (canary skipped)"
-                }
-              }]
-            }
-
-  # ── Failure notification ────────────────────────────────────────
-  notify-failure:
-    name: Notify Failure
-    runs-on: ubuntu-latest
-    needs: [canary-10, canary-25, canary-50, promote, deploy-direct]
-    if: failure()
-    steps:
-      - name: Notify failure
-        uses: slackapi/slack-github-action@v1
-        with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
-          payload: |
-            {
-              "text": "Production deployment FAILED",
-              "blocks": [{
-                "type": "section",
-                "text": {
-                  "type": "mrkdwn",
-                  "text": "*MiniURL Production Deployment FAILED*\n\n*Tag:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
-                }
-              }]
-            }
+      - name: Print access info
+        run: |
+          echo "============================================"
+          echo "  Direct Production Deploy Complete"
+          echo "============================================"
+          echo "Tag: ${{ github.event.inputs.image_tag }}"
+          kubectl -n miniurl get pods

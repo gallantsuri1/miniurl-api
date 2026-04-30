@@ -85,6 +85,12 @@ jobs:
       - name: Helm template — dev
         run: helm template miniurl helm/miniurl -f helm/miniurl/values-dev.yaml > /dev/null
 
+      - name: Helm template — staging
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-staging.yaml --set globalConfig.IMAGE_TAG=sha-staging99 > /dev/null
+
+      - name: Helm template — home
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-home.yaml --set globalConfig.IMAGE_TAG=sha-home99 > /dev/null
+
       - name: Helm template — prod
         run: helm template miniurl helm/miniurl -f helm/miniurl/values-prod.yaml > /dev/null
 
