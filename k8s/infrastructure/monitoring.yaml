@@ -173,7 +173,9 @@ metadata:
 type: Opaque
 stringData:
   admin-user: admin
-  admin-password: admin123
+  # Generate a strong password: openssl rand -base64 32
+  # Override via: --from-literal=admin-password=$(openssl rand -base64 32)
+  admin-password: changeme
 
 ---
 # ============================================

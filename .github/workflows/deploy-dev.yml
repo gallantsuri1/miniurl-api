@@ -136,7 +136,8 @@ jobs:
             --namespace miniurl \
             --create-namespace \
             --timeout 5m \
-            --wait
+            --wait \
+            --atomic
 
       - name: Verify deployments
         run: |

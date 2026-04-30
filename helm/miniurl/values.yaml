@@ -27,7 +27,7 @@ services:
     replicas: 2
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/api-gateway
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -84,7 +84,7 @@ services:
     replicas: 1
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/eureka-server
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -137,7 +137,7 @@ services:
     replicas: 2
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/identity-service
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -208,7 +208,7 @@ services:
     replicas: 2
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/url-service
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -274,7 +274,7 @@ services:
     replicas: 3
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/redirect-service
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -331,7 +331,7 @@ services:
     replicas: 2
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/feature-service
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -393,7 +393,7 @@ services:
     replicas: 1
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/notification-service
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
@@ -466,7 +466,7 @@ services:
     replicas: 1
     image:
       repository: ghcr.io/gallantsuri1/miniurl-api/analytics-service
-      tag: latest
+      tag: ""
       pullPolicy: Always
     ports:
       - name: http
