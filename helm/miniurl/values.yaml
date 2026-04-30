@@ -20,6 +20,7 @@ globalConfig:
   MYSQL_ANALYTICS_HOST: "mysql-analytics"
   MYSQL_ANALYTICS_PORT: "3306"
   MYSQL_ANALYTICS_DB: "analytics_db"
+  # IMAGE_TAG is set by CI; if not set, per-service image tags are used
 
 services:
   api-gateway:
@@ -32,13 +33,51 @@ services:
       - name: http
         containerPort: 8080
         servicePort: 80
-    serviceType: LoadBalancer
+    serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: true
       minReplicas: 2
       maxReplicas: 10
       cpu: 70
       memory: 80
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8080
+        initialDelaySeconds: 60
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      minAvailable: 1
     env: []
 
   eureka-server:
@@ -52,8 +91,46 @@ services:
         containerPort: 8761
         servicePort: 8761
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: false
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8761
+        initialDelaySeconds: 90
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8761
+        initialDelaySeconds: 60
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      maxUnavailable: 0
     env: []
 
   identity-service:
@@ -67,12 +144,50 @@ services:
         containerPort: 8081
         servicePort: 8081
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: true
       minReplicas: 2
       maxReplicas: 6
       cpu: 70
       memory: 80
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8081
+        initialDelaySeconds: 60
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8081
+        initialDelaySeconds: 30
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      minAvailable: 1
     env:
       - name: SPRING_DATASOURCE_URL
         value: "jdbc:mysql://mysql-identity:3306/identity_db"
@@ -83,6 +198,11 @@ services:
           secretKeyRef:
             name: db-secrets
             key: MYSQL_ROOT_PASSWORD
+      - name: JWT_SECRET
+        valueFrom:
+          secretKeyRef:
+            name: jwt-rsa-keys
+            key: jwt-secret
 
   url-service:
     replicas: 2
@@ -95,12 +215,50 @@ services:
         containerPort: 8081
         servicePort: 8081
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: true
       minReplicas: 2
       maxReplicas: 8
       cpu: 70
       memory: 80
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8081
+        initialDelaySeconds: 60
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8081
+        initialDelaySeconds: 30
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      minAvailable: 1
     env:
       - name: SPRING_DATASOURCE_URL
         value: "jdbc:mysql://mysql-url:3306/url_db"
@@ -123,12 +281,50 @@ services:
         containerPort: 8080
         servicePort: 8080
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: true
       minReplicas: 3
       maxReplicas: 20
       cpu: 70
       memory: 80
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 15
+        periodSeconds: 5
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      minAvailable: 2
     env: []
 
   feature-service:
@@ -142,8 +338,46 @@ services:
         containerPort: 8081
         servicePort: 8081
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: false
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8081
+        initialDelaySeconds: 60
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8081
+        initialDelaySeconds: 30
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      minAvailable: 1
     env:
       - name: SPRING_DATASOURCE_URL
         value: "jdbc:mysql://mysql-feature:3306/feature_db"
@@ -166,9 +400,67 @@ services:
         containerPort: 8080
         servicePort: 8080
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: false
-    env: []
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8080
+        initialDelaySeconds: 60
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      maxUnavailable: 0
+    env:
+      - name: SMTP_HOST
+        valueFrom:
+          secretKeyRef:
+            name: smtp-credentials
+            key: SMTP_HOST
+      - name: SMTP_PORT
+        valueFrom:
+          secretKeyRef:
+            name: smtp-credentials
+            key: SMTP_PORT
+      - name: SMTP_USERNAME
+        valueFrom:
+          secretKeyRef:
+            name: smtp-credentials
+            key: SMTP_USERNAME
+      - name: SMTP_PASSWORD
+        valueFrom:
+          secretKeyRef:
+            name: smtp-credentials
+            key: SMTP_PASSWORD
 
   analytics-service:
     replicas: 1
@@ -181,8 +473,46 @@ services:
         containerPort: 8080
         servicePort: 8080
     serviceType: ClusterIP
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    terminationGracePeriodSeconds: 30
     hpa:
       enabled: false
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+    probes:
+      liveness:
+        httpGet:
+          path: /actuator/health
+          port: 8080
+        initialDelaySeconds: 60
+        periodSeconds: 15
+      readiness:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+    prometheus:
+      scrape: true
+      path: /actuator/prometheus
+    securityContext:
+      fsGroup: 1000
+      runAsNonRoot: true
+      runAsUser: 1000
+    containerSecurityContext:
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+    pdb:
+      maxUnavailable: 0
     env:
       - name: SPRING_DATASOURCE_URL
         value: "jdbc:mysql://mysql-analytics:3306/analytics_db"
@@ -193,3 +523,40 @@ services:
           secretKeyRef:
             name: db-secrets
             key: MYSQL_ROOT_PASSWORD
+
+ingress:
+  enabled: true
+  host: api.miniurl.com
+  className: nginx
+  sslRedirect: "true"
+  tls: true
+  clusterIssuer: letsencrypt-prod
+  annotations: {}
+
+canary:
+  enabled: false
+  weight: 10
+
+serviceAccount:
+  create: true
+  name: miniurl-sa
+  annotations: {}
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx
+
+pdb:
+  enabled: true
+
+resourceQuota:
+  enabled: true
+  limits:
+    requests.cpu: "4"
+    requests.memory: "8Gi"
+    limits.cpu: "8"
+    limits.memory: "16Gi"
+    persistentvolumeclaims: "10"
+    services: "20"
+    secrets: "20"
+    configmaps: "10"

@@ -1,0 +1,135 @@
+# MiniURL — Local Minikube development overrides
+# Usage: helm template miniurl ./helm/miniurl -f ./helm/miniurl/values-local.yaml
+
+globalConfig:
+  SPRING_PROFILES_ACTIVE: "local"
+  APP_BASE_URL: "http://miniurl.local"
+  APP_UI_BASE_URL: "http://miniurl.local"
+
+services:
+  api-gateway:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  eureka-server:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  identity-service:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  url-service:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  redirect-service:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  feature-service:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  notification-service:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+  analytics-service:
+    replicas: 1
+    image:
+      pullPolicy: IfNotPresent
+    hpa:
+      enabled: false
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+ingress:
+  host: miniurl.local
+  tls: false
+  clusterIssuer: ""
+  sslRedirect: "false"
+
+networkPolicy:
+  enabled: false
+
+resourceQuota:
+  enabled: false
+
+pdb:
+  enabled: false

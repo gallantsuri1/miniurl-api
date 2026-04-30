@@ -35,7 +35,7 @@ The system is split into several specialized services to ensure independent scal
 - **Caching/Rate Limiting**: Redis
 - **Databases**: MySQL (Multiple instances)
 - **Observability**: OpenTelemetry, Micrometer, Prometheus, Grafana
-- **Deployment**: Kubernetes, Docker
+- **Deployment**: Kubernetes, Helm, Docker, GitHub Actions
 
 ---
 
@@ -45,27 +45,28 @@ The system is split into several specialized services to ensure independent scal
 - **JDK 17** or higher
 - **Maven 3.8+**
 - **Docker & Docker Compose**
-- **kubectl** (for Kubernetes deployment)
+- **kubectl** + **Helm 3.14+** (for Kubernetes deployment)
+- **Minikube** (optional, for local K8s testing)
 
-### 1. Local Infrastructure Setup
-The project includes a `docker-compose.yml` that spins up all required infrastructure:
-- Eureka Server
-- Kafka & Zookeeper
-- Redis
-- MySQL (Identity, URL, and Feature databases)
+### 1. Local Development (Docker Compose)
+
+The fastest way to get a full development environment:
 
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
+This starts all 8 services plus Kafka, Zookeeper, Redis, 3× MySQL, Prometheus, and Grafana.
+
+See [Local Development with Docker Compose](docs/deployment/local-docker-compose.md) for details.
+
 ### 2. Build the Project
-Build all modules from the root directory:
+
 ```bash
 mvn clean install -DskipTests
 ```
 
-### 3. Running the Services
-You can run the services via your IDE or using Maven:
+### 3. Running Individual Services
 
 **Order of startup:**
 1. `eureka-server`
@@ -73,22 +74,54 @@ You can run the services via your IDE or using Maven:
 3. `api-gateway`, `redirect-service`
 4. `notification-service`, `analytics-service`
 
-Example to run a service:
 ```bash
 mvn spring-boot:run -pl identity-service
 ```
 
-### 4. Kubernetes Deployment
-The Kubernetes manifests are located in the `k8s/` directory.
+### 4. Local Kubernetes (Minikube)
 
-1. **Apply Global Config**:
-   ```bash
-   kubectl apply -f k8s/infrastructure/global-config.yaml
-   ```
-2. **Deploy Services**:
-   ```bash
-   kubectl apply -f k8s/services/
-   ```
+For testing Helm charts, canary deployments, and HPA:
+
+```bash
+minikube start --cpus=4 --memory=8192
+helm upgrade --install miniurl ./helm/miniurl \
+  --values ./helm/miniurl/values-local.yaml \
+  --namespace miniurl --create-namespace --wait
+```
+
+See [Local Development with Minikube](docs/deployment/local-minikube.md) for details.
+
+### 5. Kubernetes Deployment (Helm)
+
+MiniURL is deployed via a **Helm chart** ([`helm/miniurl/`](helm/miniurl/)) — the single source of truth for all Kubernetes resources.
+
+```bash
+# Development
+helm upgrade --install miniurl ./helm/miniurl \
+  --values ./helm/miniurl/values-dev.yaml \
+  --namespace miniurl --create-namespace --wait
+
+# Production
+helm upgrade --install miniurl ./helm/miniurl \
+  --values ./helm/miniurl/values-prod.yaml \
+  --set globalConfig.IMAGE_TAG=sha-{hash} \
+  --namespace miniurl --create-namespace --wait
+```
+
+---
+
+## 🔄 CI/CD Pipeline
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| [PR Validation](.github/workflows/pr-validation.yml) | Pull request | Build, test, Helm lint, Docker (`pr-N` tag) |
+| [Deploy to Dev](.github/workflows/deploy-dev.yml) | Push to main | Build `sha-{hash}`, deploy to dev, smoke test |
+| [Deploy to Prod](.github/workflows/deploy-prod.yml) | Manual | Canary 10%→25%→50%→100% with approval gates |
+| [Rollback](.github/workflows/rollback.yml) | Manual | `helm rollback` with smoke tests |
+| [Bootstrap Environment](.github/workflows/bootstrap-environment.yml) | Manual | Provision namespace, secrets, infra, monitoring, MiniURL |
+| [Release](.github/workflows/release.yml) | `v*` tag | Multi-arch build, semver images |
+
+See [GitHub Actions Reference](docs/deployment/github-actions.md) and [Release Process](docs/deployment/release-process.md) for full details.
 
 ---
 
@@ -100,13 +133,16 @@ The system uses **RS256 (Asymmetric)** JWTs for secure, stateless authentication
 2. **Public Key Distribution**: `identity-service` exposes a `/jwks.json` endpoint containing the **Public Key**.
 3. **Token Validation**: `api-gateway` fetches the public key from the JWKS endpoint and validates incoming tokens without needing to call the Identity Service for every request.
 
+Secrets are managed via Kubernetes Secrets (`db-secrets`, `jwt-rsa-keys`, `smtp-credentials`) — never stored in values files or committed to the repository.
+
 ---
 
 ## 📈 Observability
 
 - **Distributed Tracing**: Integrated via **OpenTelemetry**. Every request is tracked across services using a unique Trace ID.
-- **Metrics**: Exposed via **Prometheus** endpoints in every service.
+- **Metrics**: Exposed via **Prometheus** endpoints (`/actuator/prometheus`) in every service. Scraping configured via pod annotations.
 - **Logging**: Centralized logging (ELK Stack) is configured for production environments.
+- **Dashboards**: Grafana dashboards available in `deploy/monitoring/dashboards/`.
 
 ---
 
@@ -115,21 +151,21 @@ The system uses **RS256 (Asymmetric)** JWTs for secure, stateless authentication
 All requests should be sent to the **API Gateway** (default port `8080`).
 
 ### Public Endpoints
-- `GET /r/{code}` $\rightarrow$ Redirects to original URL (handled by Redirect Service)
-- `POST /api/auth/signup` $\rightarrow$ User registration
-- `POST /api/auth/login` $\rightarrow$ Authentication
-- `GET /api/features/global` $\rightarrow$ Get global feature flags
+- `GET /r/{code}` → Redirects to original URL (handled by Redirect Service)
+- `POST /api/auth/signup` → User registration
+- `POST /api/auth/login` → Authentication
+- `GET /api/features/global` → Get global feature flags
 
 ### Authenticated Endpoints
-- `POST /api/urls` $\rightarrow$ Create short URL
-- `GET /api/urls` $\rightarrow$ List user's URLs
-- `DELETE /api/urls/{id}` $\rightarrow$ Delete a URL
-- `PUT /api/users/profile` $\rightarrow$ Update profile
+- `POST /api/urls` → Create short URL
+- `GET /api/urls` → List user's URLs
+- `DELETE /api/urls/{id}` → Delete a URL
+- `PUT /api/users/profile` → Update profile
 
 ### Admin Endpoints
-- `POST /api/admin/invites` $\rightarrow$ Send email invitation
-- `GET /api/admin/users` $\rightarrow$ Manage all users
-- `POST /api/admin/features` $\rightarrow$ Manage feature flags
+- `POST /api/admin/invites` → Send email invitation
+- `GET /api/admin/users` → Manage all users
+- `POST /api/admin/features` → Manage feature flags
 
 ---
 
@@ -137,15 +173,31 @@ All requests should be sent to the **API Gateway** (default port `8080`).
 
 ```text
 .
-├── common/                 # Shared DTOs, Exceptions, and Utils
-├── api-gateway/            # Spring Cloud Gateway (Routing, Security, Rate Limiting)
-├── eureka-server/          # Service Discovery
-├── identity-service/       # Auth, User Management, JWKS
-├── url-service/            # URL Management, Snowflake ID Generation
-├── redirect-service/       # Reactive Redirect Path (High Throughput)
-├── feature-service/        # Feature Flag Management
-├── notification-service/   # Async Email Worker (Kafka Consumer)
-├── analytics-service/      # Click Tracking Worker (Kafka Consumer)
-├── k8s/                    # Kubernetes Manifests
-└── docker-compose.yml      # Local Infrastructure
+├── common/                     # Shared DTOs, Exceptions, and Utils
+├── api-gateway/                # Spring Cloud Gateway (Routing, Security, Rate Limiting)
+├── eureka-server/              # Service Discovery
+├── identity-service/           # Auth, User Management, JWKS
+├── url-service/                # URL Management, Snowflake ID Generation
+├── redirect-service/           # Reactive Redirect Path (High Throughput)
+├── feature-service/            # Feature Flag Management
+├── notification-service/       # Async Email Worker (Kafka Consumer)
+├── analytics-service/          # Click Tracking Worker (Kafka Consumer)
+├── helm/miniurl/               # Helm Chart (single source of truth for K8s)
+├── .github/workflows/          # CI/CD Pipelines (6 workflows)
+├── docs/deployment/            # Deployment Documentation
+├── deploy/                     # Deployment Scripts & Monitoring
+├── k8s/                        # Legacy K8s Manifests (deprecated — use Helm)
+├── scripts/                    # Utility Scripts
+├── terraform/                  # Infrastructure as Code
+└── docker-compose.yml          # Local Development Environment
 ```
+
+---
+
+## 📚 Deployment Documentation
+
+- [Initial Environment Bootstrap](docs/deployment/initial-bootstrap.md) — Provision a new environment from scratch
+- [Release Process](docs/deployment/release-process.md) — Full release flow with canary deployments
+- [GitHub Actions Reference](docs/deployment/github-actions.md) — All 6 CI/CD workflows explained
+- [Local Docker Compose](docs/deployment/local-docker-compose.md) — Feature development without K8s
+- [Local Minikube](docs/deployment/local-minikube.md) — Test Helm charts and canary locally

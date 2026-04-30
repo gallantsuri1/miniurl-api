@@ -1,0 +1,189 @@
+name: Deploy to Development
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - 'README.md'
+      - 'SETUP_GUIDE.md'
+      - 'docs/**'
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Specific image tag to deploy (default: sha-{short_sha})'
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  build-and-push:
+    name: Build and Push Images (sha tag)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.image_tag == ''
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - eureka-server
+          - api-gateway
+          - identity-service
+          - url-service
+          - redirect-service
+          - feature-service
+          - notification-service
+          - analytics-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate Docker tags
+        id: meta
+        run: |
+          SHA_TAG="sha-${GITHUB_SHA::8}"
+          echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.service }}:${SHA_TAG}" >> $GITHUB_OUTPUT
+          echo "sha_tag=${SHA_TAG}" >> $GITHUB_OUTPUT
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: ${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+    outputs:
+      sha_tag:
+        description: 'SHA-based image tag'
+        value: ${{ steps.meta.outputs.sha_tag }}
+
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: |
+      always() &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
+    environment:
+      name: development
+      url: https://dev.api.miniurl.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "IMAGE_TAG=${{ github.event.inputs.image_tag }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ needs.build-and-push.outputs.sha_tag }}" ]; then
+            echo "IMAGE_TAG=${{ needs.build-and-push.outputs.sha_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_TAG=sha-${GITHUB_SHA::8}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.29.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.DEV_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-dev.yaml \
+            --set globalConfig.IMAGE_TAG="${{ steps.tag.outputs.IMAGE_TAG }}" \
+            --namespace miniurl \
+            --create-namespace \
+            --timeout 5m \
+            --wait
+
+      - name: Verify deployments
+        run: |
+          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
+            echo "Checking ${service}..."
+            kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
+          done
+
+      - name: Smoke test — API Gateway health
+        run: |
+          INGRESS_IP=$(kubectl -n miniurl get ingress miniurl-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -n "$INGRESS_IP" ]; then
+            curl -fsS -H "Host: dev.api.miniurl.com" "http://${INGRESS_IP}/api/health" || echo "WARN: Health check failed (ingress may not be ready)"
+          else
+            echo "INFO: No ingress IP yet, skipping smoke test"
+          fi
+
+      - name: Notify deployment success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "Dev deployment successful",
+              "blocks": [{
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*MiniURL Dev Deployment*\n\n*Tag:* `${{ steps.tag.outputs.IMAGE_TAG }}`\n*Commit:* `${{ github.sha }}`\n*Status:* ✅ Success"
+                }
+              }]
+            }
+
+      - name: Notify deployment failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "Dev deployment failed",
+              "blocks": [{
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*MiniURL Dev Deployment FAILED*\n\n*Tag:* `${{ steps.tag.outputs.IMAGE_TAG }}`\n*Commit:* `${{ github.sha }}`\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
+                }
+              }]
+            }

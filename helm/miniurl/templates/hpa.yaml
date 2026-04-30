@@ -4,15 +4,18 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ $name }}-hpa
+  name: {{ include "miniurl.serviceName" (dict "name" $name "canary" $.Values.canary.enabled) }}-hpa
   namespace: {{ $.Values.namespace }}
   labels:
-    {{- include "miniurl.labels" (dict "name" (printf "%s-hpa" $name)) | nindent 4 }}
+    {{- include "miniurl.labels" (dict "name" (printf "%s-hpa" $name) "managedBy" "helm") | nindent 4 }}
+    {{- if $.Values.canary.enabled }}
+    canary: "true"
+    {{- end }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ $name }}
+    name: {{ include "miniurl.serviceName" (dict "name" $name "canary" $.Values.canary.enabled) }}
   minReplicas: {{ $svc.hpa.minReplicas }}
   maxReplicas: {{ $svc.hpa.maxReplicas }}
   metrics:

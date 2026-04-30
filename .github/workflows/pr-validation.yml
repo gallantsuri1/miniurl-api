@@ -1,4 +1,4 @@
-name: PR Validation - Build, Test & Push Dev Images
+name: PR Validation - Build, Test, Helm Lint & Push Dev Images
 
 on:
   pull_request:
@@ -9,6 +9,7 @@ on:
       - 'README.md'
       - 'SETUP_GUIDE.md'
       - '.github/workflows/release.yml'
+      - 'docs/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -50,7 +51,7 @@ jobs:
 
       - name: Run Maven Build & Unit Tests
         run: |
-          mvn clean test -DskipITs -B --no-transfer-progress --no-transfer-progress
+          mvn clean test -DskipITs -B --no-transfer-progress
 
       - name: Upload test results
         if: always()
@@ -61,6 +62,37 @@ jobs:
             **/target/surefire-reports/
             **/target/failsafe-reports/
           retention-days: 7
+
+  helm-lint:
+    name: Helm Lint & Template Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Helm lint
+        run: helm lint helm/miniurl
+
+      - name: Helm template — local
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-local.yaml > /dev/null
+
+      - name: Helm template — dev
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-dev.yaml > /dev/null
+
+      - name: Helm template — prod
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-prod.yaml > /dev/null
+
+      - name: Helm template — canary (prod + canary)
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-prod.yaml -f helm/miniurl/values-canary.yaml > /dev/null
+
+      - name: Helm template — prod with IMAGE_TAG override
+        run: helm template miniurl helm/miniurl -f helm/miniurl/values-prod.yaml --set globalConfig.IMAGE_TAG=sha-test1234 > /dev/null
 
   build-and-push-docker:
     name: Build and Push Docker Images

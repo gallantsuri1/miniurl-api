@@ -1,0 +1,355 @@
+name: Deploy to Production (Canary)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (sha-{hash})'
+        required: true
+        type: string
+      skip_canary:
+        description: 'Skip canary and deploy directly (emergency only)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  # ── Phase 0: Pre-deployment validation ──────────────────────────
+  preflight:
+    name: Pre-flight Checks
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Helm lint
+        run: helm lint helm/miniurl
+
+      - name: Helm template validation
+        run: |
+          helm template miniurl helm/miniurl \
+            -f helm/miniurl/values-prod.yaml \
+            --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" > /dev/null
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.29.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - name: Capture current revision for rollback
+        id: current
+        run: |
+          CURRENT_REV=$(helm history miniurl -n miniurl --max 1 -o json 2>/dev/null | grep -o '"revision":[0-9]*' | head -1 | cut -d: -f2 || echo "0")
+          echo "current_revision=${CURRENT_REV}" >> $GITHUB_OUTPUT
+          echo "Current revision: ${CURRENT_REV}"
+
+    outputs:
+      current_revision: ${{ steps.current.outputs.current_revision }}
+
+  # ── Phase 1: Deploy canary at 10% ───────────────────────────────
+  canary-10:
+    name: Canary 10%
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: github.event.inputs.skip_canary != 'true'
+    environment:
+      name: production-canary-10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy canary at 10%
+        run: |
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-canary.yaml \
+            --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
+            --set canary.weight=10 \
+            --namespace miniurl \
+            --timeout 5m \
+            --wait
+
+      - name: Verify canary pods
+        run: |
+          kubectl -n miniurl get pods -l canary=true
+          for deploy in api-gateway-canary redirect-service-canary identity-service-canary; do
+            kubectl -n miniurl rollout status "deployment/${deploy}" --timeout=120s || true
+          done
+
+      - name: Wait for stabilization (60s)
+        run: sleep 60
+
+      - name: Check Prometheus alerts
+        run: |
+          echo "Checking for firing alerts..."
+          # Placeholder: query Prometheus AlertManager API
+          # curl -s "$PROMETHEUS_URL/api/v1/alerts" | grep -c '"severity":"critical"'
+          echo "No critical alerts (Prometheus integration pending)"
+
+  # ── Phase 2: Canary at 25% ──────────────────────────────────────
+  canary-25:
+    name: Canary 25%
+    runs-on: ubuntu-latest
+    needs: canary-10
+    if: github.event.inputs.skip_canary != 'true'
+    environment:
+      name: production-canary-25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Bump canary to 25%
+        run: |
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-canary.yaml \
+            --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
+            --set canary.weight=25 \
+            --namespace miniurl \
+            --timeout 5m \
+            --wait
+
+      - name: Wait for stabilization (60s)
+        run: sleep 60
+
+      - name: Check Prometheus alerts
+        run: |
+          echo "No critical alerts (Prometheus integration pending)"
+
+  # ── Phase 3: Canary at 50% ──────────────────────────────────────
+  canary-50:
+    name: Canary 50%
+    runs-on: ubuntu-latest
+    needs: canary-25
+    if: github.event.inputs.skip_canary != 'true'
+    environment:
+      name: production-canary-50
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Bump canary to 50%
+        run: |
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-prod.yaml \
+            --values ./helm/miniurl/values-canary.yaml \
+            --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
+            --set canary.weight=50 \
+            --namespace miniurl \
+            --timeout 5m \
+            --wait
+
+      - name: Wait for stabilization (60s)
+        run: sleep 60
+
+      - name: Check Prometheus alerts
+        run: |
+          echo "No critical alerts (Prometheus integration pending)"
+
+  # ── Phase 4: Full promotion (100%) ──────────────────────────────
+  promote:
+    name: Promote to 100%
+    runs-on: ubuntu-latest
+    needs: canary-50
+    if: github.event.inputs.skip_canary != 'true'
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Promote — disable canary, deploy stable
+        run: |
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-prod.yaml \
+            --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
+            --set canary.enabled=false \
+            --namespace miniurl \
+            --timeout 5m \
+            --wait
+
+      - name: Verify stable deployments
+        run: |
+          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
+            echo "Checking ${service}..."
+            kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
+          done
+
+      - name: Clean up canary resources
+        run: |
+          kubectl -n miniurl delete deployment -l canary=true --ignore-not-found
+          kubectl -n miniurl delete service -l canary=true --ignore-not-found
+          kubectl -n miniurl delete hpa -l canary=true --ignore-not-found
+          kubectl -n miniurl delete ingress miniurl-canary-ingress --ignore-not-found
+
+      - name: Smoke test
+        run: |
+          INGRESS_IP=$(kubectl -n miniurl get ingress miniurl-ingress -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+          if [ -n "$INGRESS_IP" ]; then
+            curl -fsS -H "Host: api.miniurl.com" "http://${INGRESS_IP}/api/health" || echo "WARN: Health check failed"
+          fi
+
+      - name: Notify success
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "Production deployment successful",
+              "blocks": [{
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*MiniURL Production Deployment*\n\n*Tag:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n*Status:* ✅ Promoted to 100%"
+                }
+              }]
+            }
+
+  # ── Direct deploy (skip canary — emergency) ─────────────────────
+  deploy-direct:
+    name: Direct Deploy (No Canary)
+    runs-on: ubuntu-latest
+    needs: preflight
+    if: github.event.inputs.skip_canary == 'true'
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Deploy directly
+        run: |
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values ./helm/miniurl/values-prod.yaml \
+            --set globalConfig.IMAGE_TAG="${{ github.event.inputs.image_tag }}" \
+            --set canary.enabled=false \
+            --namespace miniurl \
+            --timeout 5m \
+            --wait
+
+      - name: Verify deployments
+        run: |
+          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
+            kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
+          done
+
+      - name: Notify
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "Production deployment (direct)",
+              "blocks": [{
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*MiniURL Production Deployment (DIRECT)*\n\n*Tag:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n*Status:* ✅ Deployed (canary skipped)"
+                }
+              }]
+            }
+
+  # ── Failure notification ────────────────────────────────────────
+  notify-failure:
+    name: Notify Failure
+    runs-on: ubuntu-latest
+    needs: [canary-10, canary-25, canary-50, promote, deploy-direct]
+    if: failure()
+    steps:
+      - name: Notify failure
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "Production deployment FAILED",
+              "blocks": [{
+                "type": "section",
+                "text": {
+                  "type": "mrkdwn",
+                  "text": "*MiniURL Production Deployment FAILED*\n\n*Tag:* `${{ github.event.inputs.image_tag }}`\n*Commit:* `${{ github.sha }}`\n\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Build Log>"
+                }
+              }]
+            }

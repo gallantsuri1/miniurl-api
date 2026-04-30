@@ -1,0 +1,162 @@
+name: Bootstrap Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to bootstrap'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+      install_infra:
+        description: 'Install infrastructure (MySQL, Kafka, Redis, Prometheus)'
+        required: false
+        type: boolean
+        default: false
+      install_monitoring:
+        description: 'Install monitoring stack (Prometheus, Grafana)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  bootstrap:
+    name: Bootstrap ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment == 'prod' && 'production' || 'development' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.29.0'
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          if [ "${{ github.event.inputs.environment }}" = "prod" ]; then
+            echo "${{ secrets.PROD_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          else
+            echo "${{ secrets.DEV_KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          fi
+          chmod 600 $HOME/.kube/config
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace miniurl --dry-run=client -o yaml | kubectl apply -f -
+          echo "Namespace miniurl ready"
+
+      - name: Create secrets
+        run: |
+          # DB secrets
+          kubectl -n miniurl create secret generic db-secrets \
+            --from-literal=MYSQL_ROOT_PASSWORD="${{ secrets.DB_ROOT_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # JWT RSA keys
+          kubectl -n miniurl create secret generic jwt-rsa-keys \
+            --from-literal=jwt-secret="${{ secrets.JWT_SECRET }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          # SMTP credentials
+          kubectl -n miniurl create secret generic smtp-credentials \
+            --from-literal=SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+            --from-literal=SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+            --from-literal=SMTP_USERNAME="${{ secrets.SMTP_USERNAME }}" \
+            --from-literal=SMTP_PASSWORD="${{ secrets.SMTP_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          echo "Secrets created/updated"
+
+      - name: Add Helm repositories
+        if: github.event.inputs.install_infra == 'true' || github.event.inputs.install_monitoring == 'true'
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami --force-update
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+          helm repo update
+
+      - name: Install infrastructure
+        if: github.event.inputs.install_infra == 'true'
+        run: |
+          # MySQL instances
+          for db in url identity feature analytics; do
+            helm upgrade --install "mysql-${db}" bitnami/mysql \
+              --namespace miniurl \
+              --set auth.rootPassword="${{ secrets.DB_ROOT_PASSWORD }}" \
+              --set auth.database="${db}_db" \
+              --set primary.persistence.size=10Gi \
+              --wait --timeout 10m
+          done
+
+          # Redis
+          helm upgrade --install redis bitnami/redis \
+            --namespace miniurl \
+            --set architecture=standalone \
+            --set auth.enabled=false \
+            --wait --timeout 5m
+
+          # Kafka
+          helm upgrade --install kafka bitnami/kafka \
+            --namespace miniurl \
+            --set replicaCount=1 \
+            --set persistence.size=10Gi \
+            --wait --timeout 10m
+
+          echo "Infrastructure installed"
+
+      - name: Install monitoring
+        if: github.event.inputs.install_monitoring == 'true'
+        run: |
+          helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --create-namespace \
+            --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+            --set grafana.adminPassword="${{ secrets.GRAFANA_ADMIN_PASSWORD }}" \
+            --wait --timeout 10m
+
+          echo "Monitoring stack installed"
+
+      - name: Initial Helm install (MiniURL)
+        run: |
+          VALUES_FILE="./helm/miniurl/values-${{ github.event.inputs.environment }}.yaml"
+
+          helm upgrade --install miniurl ./helm/miniurl \
+            --values "$VALUES_FILE" \
+            --namespace miniurl \
+            --create-namespace \
+            --timeout 10m \
+            --wait
+
+      - name: Verify deployments
+        run: |
+          kubectl -n miniurl get all
+          for service in api-gateway eureka-server identity-service url-service redirect-service feature-service notification-service analytics-service; do
+            echo "Checking ${service}..."
+            kubectl -n miniurl rollout status "deployment/${service}" --timeout=120s || true
+          done
+
+      - name: Print access info
+        run: |
+          echo "============================================"
+          echo "  Bootstrap Complete — ${{ github.event.inputs.environment }}"
+          echo "============================================"
+          kubectl -n miniurl get ingress
+          kubectl -n miniurl get pods

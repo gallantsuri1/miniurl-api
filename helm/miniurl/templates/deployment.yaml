@@ -3,24 +3,48 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ $name }}
+  name: {{ include "miniurl.serviceName" (dict "name" $name "canary" $.Values.canary.enabled) }}
   namespace: {{ $.Values.namespace }}
   labels:
-    {{- include "miniurl.labels" (dict "name" $name) | nindent 4 }}
+    {{- include "miniurl.labels" (dict "name" $name "managedBy" "helm") | nindent 4 }}
+    {{- if $.Values.canary.enabled }}
+    canary: "true"
+    {{- end }}
 spec:
   replicas: {{ $svc.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ $svc.rollingUpdate.maxSurge | default 1 }}
+      maxUnavailable: {{ $svc.rollingUpdate.maxUnavailable | default 0 }}
   selector:
     matchLabels:
-      app: {{ $name }}
+      app: {{ include "miniurl.serviceName" (dict "name" $name "canary" $.Values.canary.enabled) }}
   template:
     metadata:
       labels:
-        app: {{ $name }}
+        app: {{ include "miniurl.serviceName" (dict "name" $name "canary" $.Values.canary.enabled) }}
+        {{- include "miniurl.labels" (dict "name" $name "managedBy" "helm") | nindent 8 }}
+        {{- if $.Values.canary.enabled }}
+        canary: "true"
+        {{- end }}
+      annotations:
+        prometheus.io/scrape: {{ $svc.prometheus.scrape | default "true" | quote }}
+        prometheus.io/path: {{ $svc.prometheus.path | default "/actuator/prometheus" | quote }}
+        prometheus.io/port: {{ $svc.prometheus.port | default (index $svc.ports 0).containerPort | quote }}
     spec:
+      {{- if $.Values.serviceAccount.create }}
+      serviceAccountName: {{ $.Values.serviceAccount.name | default (printf "%s-sa" $.Release.Name) }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ $svc.terminationGracePeriodSeconds | default 30 }}
+      {{- if $svc.securityContext }}
+      securityContext:
+        {{- toYaml $svc.securityContext | nindent 8 }}
+      {{- end }}
       containers:
       - name: {{ $name }}
-        image: "{{ $svc.image.repository }}:{{ $svc.image.tag }}"
-        imagePullPolicy: {{ $svc.image.pullPolicy | default "Always" }}
+        image: {{ include "miniurl.image" (dict "svc" $svc "root" $) }}
+        imagePullPolicy: {{ $svc.image.pullPolicy | default "IfNotPresent" }}
         ports:
         {{- range $svc.ports }}
         - name: {{ .name }}
@@ -33,4 +57,30 @@ spec:
         env:
           {{- toYaml . | nindent 8 }}
         {{- end }}
+        {{- with $svc.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- if $svc.probes }}
+        {{- if $svc.probes.liveness }}
+        livenessProbe:
+          {{- toYaml $svc.probes.liveness | nindent 10 }}
+        {{- end }}
+        {{- if $svc.probes.readiness }}
+        readinessProbe:
+          {{- toYaml $svc.probes.readiness | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        {{- if $svc.volumeMounts }}
+        volumeMounts:
+          {{- toYaml $svc.volumeMounts | nindent 10 }}
+        {{- end }}
+        {{- if $svc.containerSecurityContext }}
+        securityContext:
+          {{- toYaml $svc.containerSecurityContext | nindent 10 }}
+        {{- end }}
+      {{- if $svc.volumes }}
+      volumes:
+        {{- toYaml $svc.volumes | nindent 8 }}
+      {{- end }}
 {{- end }}
