@@ -41,6 +41,7 @@ public class OutboxRelay {
         // Gauge: number of unprocessed outbox events
         Gauge.builder("outbox_events_unprocessed", outboxRepository::countByProcessedFalse)
                 .description("Number of outbox events that have not yet been processed")
+                .tag("service", "url-service")
                 .register(meterRegistry);
 
         // Gauge: age in seconds of the oldest unprocessed outbox event
@@ -52,6 +53,7 @@ public class OutboxRelay {
                     return (double) Duration.between(oldest, LocalDateTime.now()).getSeconds();
                 })
                 .description("Age in seconds of the oldest unprocessed outbox event")
+                .tag("service", "url-service")
                 .register(meterRegistry);
     }
 

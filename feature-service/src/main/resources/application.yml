@@ -5,9 +5,9 @@ spring:
   application:
     name: feature-service
   datasource:
-    url: jdbc:mysql://mysql-feature:3306/feature_db
-    username: root
-    password: root
+    url: jdbc:mysql://${FEATURE_DB_HOST:mysql-feature}:${FEATURE_DB_PORT:3306}/feature_db
+    username: ${FEATURE_DB_USER:root}
+    password: ${FEATURE_DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
@@ -24,7 +24,7 @@ spring:
 eureka:
   client:
     serviceUrl:
-      defaultZone: http://eureka-server:8761/eureka/
+      defaultZone: ${EUREKA_SERVER_URL:http://eureka-server:8761/eureka/}
 
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}

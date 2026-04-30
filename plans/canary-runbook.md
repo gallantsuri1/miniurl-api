@@ -9,6 +9,50 @@
 
 ---
 
+## 0. AUTOMATION PACKAGE (NEW — 2026-04-30)
+
+Most manual steps in this runbook can now be automated. See [`deploy/README.md`](../deploy/README.md) for full documentation.
+
+### Quick Automated Path
+
+```bash
+export NAMESPACE=miniurl
+export MONITORING_NS=monitoring
+export CANARY_IMAGE_TAG=v2.1.0-canary
+export STABLE_IMAGE_TAG=v2.0.0-stable
+export MYSQL_ROOT_PASSWORD="<secure-password>"
+
+./scripts/deploy/preflight.sh          # Validate prerequisites
+./scripts/deploy/bootstrap-infra.sh    # Redis + Kafka
+./scripts/deploy/create-secrets.sh     # RSA keys + secrets
+./scripts/deploy/run-migrations.sh     # DB migrations
+./scripts/deploy/apply-monitoring.sh   # Alerts + blackbox-exporter
+./scripts/deploy/capture-baseline.sh   # Baseline metrics
+./scripts/deploy/start-canary.sh       # Phase 1 (10%)
+```
+
+### Script Reference
+
+| Script | Replaces Runbook Section |
+|---|---|
+| [`scripts/deploy/preflight.sh`](../scripts/deploy/preflight.sh) | Section 1 (Pre-flight) |
+| [`scripts/deploy/bootstrap-infra.sh`](../scripts/deploy/bootstrap-infra.sh) | Section 1 (Redis/Kafka health) |
+| [`scripts/deploy/create-secrets.sh`](../scripts/deploy/create-secrets.sh) | Section 1 (Secrets verification) |
+| [`scripts/deploy/run-migrations.sh`](../scripts/deploy/run-migrations.sh) | Section 1 (DB migrations) |
+| [`scripts/deploy/apply-monitoring.sh`](../scripts/deploy/apply-monitoring.sh) | Section 1 (Monitoring config) |
+| [`scripts/deploy/capture-baseline.sh`](../scripts/deploy/capture-baseline.sh) | Section 2 (Baseline capture) |
+| [`scripts/deploy/start-canary.sh`](../scripts/deploy/start-canary.sh) | Sections 3-6 (Canary phases) |
+| [`scripts/deploy/rollback-canary.sh`](../scripts/deploy/rollback-canary.sh) | Section 7 (Rollback) |
+
+### Dry-Run Mode
+
+All scripts support `DRY_RUN=true` to preview without executing:
+```bash
+DRY_RUN=true ./scripts/deploy/start-canary.sh
+```
+
+---
+
 ## 1. PRE-FLIGHT CHECKLIST
 
 Complete every item before starting the canary. Check the box as each is verified.
@@ -71,8 +115,15 @@ Complete every item before starting the canary. Check the box as each is verifie
 - [ ] **Global ConfigMap is applied**
   ```bash
   kubectl get configmap -n <NAMESPACE> global-config -o yaml | head -30
-  # Verify: REDIS_HOST, KAFKA_BOOTSTRAP_SERVERS, EUREKA_SERVER_URL, APP_BASE_URL, APP_UI_BASE_URL
+  # Verify: REDIS_HOST, KAFKA_BOOTSTRAP_SERVERS, EUREKA_SERVER_URL, APP_BASE_URL, APP_UI_BASE_URL, SPRING_PROFILES_ACTIVE
   ```
+
+- [ ] **Config hardening verified (2026-04-30)**
+  - All services use `EUREKA_SERVER_URL` (standardized from `EUREKA_URL`/`GATEWAY_EUREKA_URL`)
+  - All K8s deployments set `SPRING_PROFILES_ACTIVE=prod`
+  - DB passwords use env vars (`URL_DB_PASSWORD`, `FEATURE_DB_PASSWORD`) not hardcoded values
+  - All 8 services have `application-prod.yml` with reduced log levels
+  - See [`plans/config-server-assessment.md`](plans/config-server-assessment.md) for details
 
 ### Database Migrations
 

@@ -20,6 +20,9 @@ spec:
         envFrom:
         - configMapRef:
             name: global-config
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
         resources:
           requests:
             cpu: "500m"

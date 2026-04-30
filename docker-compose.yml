@@ -111,7 +111,7 @@ services:
       - SPRING_PROFILES_ACTIVE=dev
       - GATEWAY_REDIS_HOST=redis
       - GATEWAY_REDIS_PORT=6379
-      - GATEWAY_EUREKA_URL=http://eureka-server:8761/eureka/
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
       - IDENTITY_SERVICE_URL=http://identity-service:8081
     depends_on:
       - eureka-server
@@ -177,7 +177,7 @@ services:
       - SPRING_PROFILES_ACTIVE=dev
       - REDIRECT_REDIS_HOST=redis
       - REDIRECT_REDIS_PORT=6379
-      - EUREKA_URL=http://eureka-server:8761/eureka/
+      - EUREKA_SERVER_URL=http://eureka-server:8761/eureka/
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
     depends_on:
       - eureka-server

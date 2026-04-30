@@ -246,7 +246,9 @@ class OutboxRelayTest {
     void outboxEventsUnprocessedGaugeReflectsRepositoryCount() {
         when(outboxRepository.countByProcessedFalse()).thenReturn(5L);
 
-        double value = meterRegistry.get("outbox_events_unprocessed").gauge().value();
+        double value = meterRegistry.get("outbox_events_unprocessed")
+                .tag("service", "url-service")
+                .gauge().value();
         assertEquals(5.0, value, "Gauge should reflect countByProcessedFalse()");
     }
 
@@ -255,7 +257,9 @@ class OutboxRelayTest {
     void outboxEventsUnprocessedGaugeReturnsZero() {
         when(outboxRepository.countByProcessedFalse()).thenReturn(0L);
 
-        double value = meterRegistry.get("outbox_events_unprocessed").gauge().value();
+        double value = meterRegistry.get("outbox_events_unprocessed")
+                .tag("service", "url-service")
+                .gauge().value();
         assertEquals(0.0, value, "Gauge should return 0 when no pending events");
     }
 
@@ -264,7 +268,9 @@ class OutboxRelayTest {
     void outboxEventsAgeSecondsGaugeReturnsZeroWhenEmpty() {
         when(outboxRepository.findOldestUnprocessedCreatedAt()).thenReturn(null);
 
-        double value = meterRegistry.get("outbox_events_age_seconds").gauge().value();
+        double value = meterRegistry.get("outbox_events_age_seconds")
+                .tag("service", "url-service")
+                .gauge().value();
         assertEquals(0.0, value, "Gauge should return 0 when no unprocessed events exist");
     }
 
@@ -274,7 +280,9 @@ class OutboxRelayTest {
         LocalDateTime fiveMinutesAgo = LocalDateTime.now().minusMinutes(5);
         when(outboxRepository.findOldestUnprocessedCreatedAt()).thenReturn(fiveMinutesAgo);
 
-        double value = meterRegistry.get("outbox_events_age_seconds").gauge().value();
+        double value = meterRegistry.get("outbox_events_age_seconds")
+                .tag("service", "url-service")
+                .gauge().value();
         assertTrue(value >= 299.0 && value <= 301.0,
                 "Gauge should return approximately 300 seconds for a 5-minute-old event, got: " + value);
     }

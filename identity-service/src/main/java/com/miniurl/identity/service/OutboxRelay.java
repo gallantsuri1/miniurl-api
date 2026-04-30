@@ -3,6 +3,8 @@ package com.miniurl.identity.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.miniurl.identity.entity.Outbox;
 import com.miniurl.identity.repository.OutboxRepository;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -11,6 +13,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -29,10 +32,29 @@ public class OutboxRelay {
 
     public OutboxRelay(OutboxRepository outboxRepository,
                        KafkaTemplate<String, Object> kafkaTemplate,
-                       ObjectMapper objectMapper) {
+                       ObjectMapper objectMapper,
+                       MeterRegistry meterRegistry) {
         this.outboxRepository = outboxRepository;
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
+
+        // Gauge: number of unprocessed outbox events
+        Gauge.builder("outbox_events_unprocessed", outboxRepository::countByProcessedFalse)
+                .description("Number of outbox events that have not yet been processed")
+                .tag("service", "identity-service")
+                .register(meterRegistry);
+
+        // Gauge: age in seconds of the oldest unprocessed outbox event
+        Gauge.builder("outbox_events_age_seconds", () -> {
+                    LocalDateTime oldest = outboxRepository.findOldestUnprocessedCreatedAt();
+                    if (oldest == null) {
+                        return 0.0;
+                    }
+                    return (double) Duration.between(oldest, LocalDateTime.now()).getSeconds();
+                })
+                .description("Age in seconds of the oldest unprocessed outbox event")
+                .tag("service", "identity-service")
+                .register(meterRegistry);
     }
 
     /**

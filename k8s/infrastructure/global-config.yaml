@@ -7,6 +7,7 @@ data:
   APP_UI_BASE_URL: "http://miniurl.com"
   KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
   EUREKA_SERVER_URL: "http://eureka-server:8761/eureka/"
+  SPRING_PROFILES_ACTIVE: "prod"
 ---
 apiVersion: v1
 kind: Secret

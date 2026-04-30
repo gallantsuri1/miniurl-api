@@ -21,6 +21,8 @@ spec:
         - configMapRef:
             name: global-config
         env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
         - name: SPRING_DATASOURCE_URL
           value: "jdbc:mysql://mysql-identity:3306/identity_db"
         - name: SPRING_DATASOURCE_USERNAME
