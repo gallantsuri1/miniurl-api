@@ -32,6 +32,8 @@ globalConfig:
   MYSQL_ANALYTICS_HOST: "mysql-analytics"
   MYSQL_ANALYTICS_PORT: "3306"
   MYSQL_ANALYTICS_DB: "analytics_db"
+  # Docker Hub single-repository for per-service image tags
+  IMAGE_REPOSITORY: "docker.io/gallantsuri1/miniurl-api"
 
 services:
   api-gateway:

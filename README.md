@@ -101,29 +101,72 @@ MiniURL is deployed via a **Helm chart** ([`helm/miniurl/`](helm/miniurl/)) — 
 | **Minikube (local)** | `values-local.yaml` | `pullPolicy: Never`, local images |
 | **Development** | `values-dev.yaml` | CI auto-deploy on push to main |
 | **Home Server (K3s)** | `values-home.yaml` | Traefik ingress, ServiceLB, self-hosted runner |
-| **Production (Canary)** | `values-prod.yaml` + `values-canary.yaml` | NGINX ingress, HPA, approval-gated canary |
+| **Production** | `values-prod.yaml` | NGINX ingress, HPA, RollingUpdate deployment |
 
 ```bash
-# Example: deploy to dev
+# Example: deploy to dev with per-service image tags
 helm upgrade --install miniurl ./helm/miniurl \
   --values ./helm/miniurl/values-dev.yaml \
-  --set globalConfig.IMAGE_TAG=sha-{hash} \
+  --set services.identity-service.image.tag=identity-service-dev-abc12345 \
   --namespace miniurl --create-namespace --wait --atomic
 ```
 
-All CI deploys use immutable `sha-{hash}` image tags — mutable tags like `latest` are never used in deployed environments.
+All CI deploys use immutable image tags (`{service}-dev-{sha}` or `{service}-release-{version}`) — mutable tags like `latest` are never used in deployed environments.
 
 ---
 
 ## CI/CD Pipeline
 
+The project uses a **three-stage image promotion pipeline** with approval gates:
+
+```mermaid
+graph LR
+    A[PR Merge to main] --> B[Build & Dev Deploy]
+    B --> C[Promote to Release]
+    C --> D[Deploy to Production]
+    
+    B -.->|auto| E[Dev Environment]
+    C -.->|gated: release env| F[Docker Hub: release tag]
+    D -.->|gated: production env| G[Prod Environment]
+```
+
 | Workflow | Trigger | Runner | Purpose |
 |----------|---------|--------|---------|
 | [PR Validation](.github/workflows/pr-validation.yml) | Pull request | `ubuntu-latest` | Build, test, Helm lint, template validation |
-| [Deploy to Dev](.github/workflows/deploy-dev.yml) | Push to main | Build: `ubuntu-latest` / Deploy: `[self-hosted, home-server]` | Build `sha-{hash}`, deploy to K3s, smoke test |
-| [Deploy to Prod](.github/workflows/deploy-prod.yml) | Manual | `[self-hosted, home-server]` | Canary 10%→25%→50%→100% with approval gates |
+| [Build and Dev Deploy](.github/workflows/build-and-dev-deploy.yml) | Push to main | Build: `ubuntu-latest` / Deploy: `[self-hosted, home-server]` | Detect changed services, build dev images, deploy to K3s dev |
+| [Promote to Release](.github/workflows/promote-to-release.yml) | Manual (gated) | `ubuntu-latest` | Tag dev images as release with approval from `release` environment |
+| [Deploy to Production](.github/workflows/deploy-to-production.yml) | Manual (gated) | `[self-hosted, home-server]` | Deploy release images to prod with approval from `production` environment |
 | [Rollback](.github/workflows/rollback.yml) | Manual | `[self-hosted, home-server]` | `helm rollback` with verification |
 | [Bootstrap Environment](.github/workflows/bootstrap-environment.yml) | Manual | `[self-hosted, home-server]` | Provision namespace, secrets, infra, deploy |
+
+### Image Promotion Flow
+
+| Stage | Image Tag Format | Registry | Trigger | Approval |
+|-------|-----------------|----------|---------|----------|
+| **Dev Build** | `{service}-dev-{short_sha}` | Docker Hub | PR merged to main | None (auto) |
+| **Release Promotion** | `{service}-release-{version}` | Docker Hub | Manual workflow | GitHub Environment: `release` |
+| **Production Deploy** | Uses release tag | Docker Hub (already there) | Manual workflow | GitHub Environment: `production` |
+
+**Key principle**: The same container image that runs in dev is promoted to production — no rebuild, no risk of build inconsistency.
+
+### Change Detection
+
+Only changed services are built and deployed. The [`build-and-dev-deploy.yml`](.github/workflows/build-and-dev-deploy.yml) workflow uses `git diff` to detect which services changed:
+
+- Changes to `identity-service/*` → only identity-service is built and deployed
+- Changes to `common/*`, `pom.xml`, or `Dockerfile` → all 8 services are built and deployed
+- Changes to `README.md`, `SETUP_GUIDE.md`, `docs/**` → no build triggered
+
+### State Files
+
+The pipeline uses Git-tracked state files to track image promotion status:
+
+| File | Purpose | Updated By |
+|------|---------|------------|
+| [`image-tags-dev.yaml`](image-tags-dev.yaml) | Latest dev image tags per service | `build-and-dev-deploy.yml` |
+| [`pending-releases.yaml`](pending-releases.yaml) | Services awaiting release promotion | `build-and-dev-deploy.yml` |
+| [`release-tags.yaml`](release-tags.yaml) | Released image tags with version | `promote-to-release.yml` |
+| [`prod-deployments.yaml`](prod-deployments.yaml) | Production deployment history | `deploy-to-production.yml` |
 
 The **self-hosted runner** on the home server connects **outbound** to GitHub via WebSocket — no inbound SSH or webhook ports needed. See [Home Server K3s Guide](docs/deployment/home-server-k3s.md) for setup.
 
@@ -186,7 +229,7 @@ All requests should be sent to the **API Gateway** (default port `8080`).
 ├── notification-service/       # Async Email Worker (Kafka Consumer)
 ├── analytics-service/          # Click Tracking Worker (Kafka Consumer)
 ├── helm/miniurl/               # Helm Chart (single source of truth for K8s)
-├── .github/workflows/          # CI/CD Pipelines (5 workflows)
+├── .github/workflows/          # CI/CD Pipelines (6 workflows)
 ├── scripts/
 │   ├── local/                  # Minikube dev scripts
 │   └── deploy/                 # Deployment & smoke-test scripts
@@ -195,6 +238,10 @@ All requests should be sent to the **API Gateway** (default port `8080`).
 │   └── development/            # Local Minikube guide
 ├── k8s/                        # Infrastructure manifests (Prometheus, Grafana) + deprecated
 ├── terraform/                  # Infrastructure as Code
+├── image-tags-dev.yaml         # Dev image tags (auto-updated by CI)
+├── pending-releases.yaml       # Pending release promotions (auto-updated)
+├── release-tags.yaml           # Released image tags (promoted from dev)
+├── prod-deployments.yaml       # Production deployment history
 └── docker-compose.yml          # Local Development Environment
 ```
 
@@ -203,6 +250,6 @@ All requests should be sent to the **API Gateway** (default port `8080`).
 - [Home Server K3s Deployment](docs/deployment/home-server-k3s.md) — Self-hosted runner model, K3s setup, day-2 ops
 - [Local Minikube Development](docs/development/local-minikube.md) — Full walkthrough, hybrid mode, troubleshooting
 - [Initial Environment Bootstrap](docs/deployment/initial-bootstrap.md) — Provision a new environment from scratch
-- [Release Process](docs/deployment/release-process.md) — Full release flow with canary deployments
-- [GitHub Actions Reference](docs/deployment/github-actions.md) — All 5 CI/CD workflows explained
+- [Release Process](docs/deployment/release-process.md) — Full release flow with image promotion
+- [GitHub Actions Reference](docs/deployment/github-actions.md) — All 6 CI/CD workflows explained
 - [Local Docker Compose](docs/deployment/local-docker-compose.md) — Feature development without K8s

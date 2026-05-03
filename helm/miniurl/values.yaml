@@ -20,7 +20,9 @@ globalConfig:
   MYSQL_ANALYTICS_HOST: "mysql-analytics"
   MYSQL_ANALYTICS_PORT: "3306"
   MYSQL_ANALYTICS_DB: "analytics_db"
-  # IMAGE_TAG is set by CI; if not set, per-service image tags are used
+  # IMAGE_TAG is set by CI for legacy GHCR mode (single tag for all services)
+  # IMAGE_REPOSITORY is set for Docker Hub single-repo mode with per-service tags
+  IMAGE_REPOSITORY: "docker.io/gallantsuri1/miniurl-api"
 
 services:
   api-gateway:

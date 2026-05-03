@@ -6,6 +6,8 @@ globalConfig:
   SPRING_PROFILES_ACTIVE: "prod"
   APP_BASE_URL: "http://api.miniurl.com"
   APP_UI_BASE_URL: "http://miniurl.com"
+  # Docker Hub single-repository for per-service image tags
+  IMAGE_REPOSITORY: "docker.io/gallantsuri1/miniurl-api"
 
 services:
   api-gateway:
