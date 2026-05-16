@@ -47,7 +47,6 @@
         <module>feature-service</module>
         <module>notification-service</module>
         <module>analytics-service</module>
-        <module>miniurl-monolith</module>
     </modules>
 
     <dependencyManagement>

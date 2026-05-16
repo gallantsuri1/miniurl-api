@@ -146,11 +146,6 @@ mvn clean test -DskipITs
 # Single module
 mvn test -pl url-service -am
 
-# Single test class
-mvn test -pl miniurl-monolith -am -Dtest="UrlCrudIntegrationTest"
-
-# Single test method
-mvn test -pl miniurl-monolith -am -Dtest="UrlCrudIntegrationTest#createUrlWithValidRequest_shouldReturnShortenedUrl"
 ```
 
 ## Environment Variables

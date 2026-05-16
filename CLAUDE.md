@@ -14,12 +14,6 @@ mvn clean test -DskipITs
 # Run tests for a single module
 mvn test -pl url-service -am
 
-# Run a single test class
-mvn test -pl miniurl-monolith -am -Dtest="UrlCrudIntegrationTest" -Dsurefire.failIfNoSpecifiedTests=false
-
-# Run a single test method
-mvn test -pl miniurl-monolith -am -Dtest="UrlCrudIntegrationTest#createUrlWithValidRequest_shouldReturnShortenedUrl" -Dsurefire.failIfNoSpecifiedTests=false
-
 # Start a service locally
 mvn spring-boot:run -pl identity-service
 
@@ -45,7 +39,6 @@ Java 17 / Spring Boot 3.2.0 / Spring Cloud 2023.0.0 multi-module Maven project �
 | **feature-service** | 8084 | Feature flags with Redis caching |
 | **notification-service** | 8085 | Kafka consumer — email dispatch |
 | **analytics-service** | 8086 | Kafka consumer — click event persistence |
-| **miniurl-monolith** | — | Legacy monolith (tests retained for regression) |
 
 Startup order: eureka-server → identity/url/feature → gateway/redirect → notification/analytics.
 
@@ -73,7 +66,6 @@ Startup order: eureka-server → identity/url/feature → gateway/redirect → n
 ├── feature-service/         # Feature flags
 ├── notification-service/    # Kafka -> email
 ├── analytics-service/       # Kafka -> analytics persistence
-├── miniurl-monolith/        # Legacy monolith (tests only)
 ├── k8s/                     # K8s manifests
 ├── helm/                    # Helm charts
 ├── terraform/               # Infrastructure as code
@@ -84,7 +76,5 @@ Startup order: eureka-server → identity/url/feature → gateway/redirect → n
 
 ## Test Patterns
 
-- Monolith integration tests use `@SpringBootTest` with H2 in-memory DB (`application-test.yml`)
-- All `@SpringBootTest` classes share the same Spring context and H2 database — cleanup state in `@BeforeEach`/`@AfterEach` to avoid cross-test leakage
 - Microservice tests use mocked dependencies where possible
 - Test naming convention: `{method}_{scenario}_should{ExpectedBehavior}`
