@@ -2,6 +2,10 @@ package com.miniurl.redirect.controller;
 
 import com.miniurl.common.dto.ClickEvent;
 import com.miniurl.redirect.service.RedirectService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +24,7 @@ import java.time.LocalDateTime;
 
 @Slf4j
 @RestController
+@Tag(name = "Redirect", description = "High-throughput URL redirect endpoint")
 public class RedirectController {
 
     private final RedirectService redirectService;
@@ -28,6 +33,12 @@ public class RedirectController {
         this.redirectService = redirectService;
     }
 
+    @Operation(summary = "Redirect by short code", description = "Resolves a short code and redirects to the original URL. Publishes click event asynchronously.")
+    @ApiResponses({
+        @ApiResponse(responseCode = "302", description = "Redirect to original URL"),
+        @ApiResponse(responseCode = "404", description = "Short URL not found"),
+        @ApiResponse(responseCode = "400", description = "Blocked redirect (malicious URL)")
+    })
     @GetMapping("/r/{code}")
     public Mono<ResponseEntity<Object>> redirect(@PathVariable String code,
                                                   @RequestHeader(value = "User-Agent", required = false) String userAgent,

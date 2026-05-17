@@ -105,6 +105,13 @@
             <scope>provided</scope>
         </dependency>
 
+        <!-- Swagger/OpenAPI UI -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
         <!-- Common Library -->
         <dependency>
             <groupId>com.miniurl</groupId>

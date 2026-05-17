@@ -29,6 +29,16 @@ eureka:
 app:
   base-url: ${APP_BASE_URL:http://localhost:8080}
 
+# Swagger/OpenAPI — enabled by default (non-prod)
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  show-actuator: false
+
 management:
   endpoints:
     web:

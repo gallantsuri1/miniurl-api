@@ -10,6 +10,9 @@ import com.miniurl.identity.entity.UserStatus;
 import com.miniurl.identity.repository.RoleRepository;
 import com.miniurl.identity.repository.UserRepository;
 import com.miniurl.identity.service.OtpService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -33,6 +36,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/admin")
 @PreAuthorize("hasRole('ADMIN')")
+@Tag(name = "Admin", description = "Admin-only user management and statistics endpoints")
 public class AdminController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminController.class);
@@ -47,6 +51,11 @@ public class AdminController {
         this.otpService = otpService;
     }
 
+    @Operation(summary = "List all users", description = "Returns a paginated list of users with optional status filter and search.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Users retrieved"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "Admin role required")
+    })
     @GetMapping("/users")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAllUsers(
             @RequestParam(required = false) String status,
@@ -124,6 +133,11 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("Users retrieved", response));
     }
 
+    @Operation(summary = "Get user by ID", description = "Returns a single user's details by their ID.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User retrieved"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @GetMapping("/users/{id}")
     public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable Long id) {
         User user = userRepository.findById(id)
@@ -131,6 +145,10 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("User retrieved", toUserResponse(user)));
     }
 
+    @Operation(summary = "Search users", description = "Searches users by first name, last name, or email.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Users found")
+    })
     @GetMapping("/users/search")
     public ResponseEntity<ApiResponse<List<UserResponse>>> searchUsers(@RequestParam String query) {
         List<User> users = userRepository.findByFirstNameContainingOrLastNameContainingOrEmailContaining(
@@ -141,6 +159,11 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("Users found", userResponses));
     }
 
+    @Operation(summary = "Deactivate user", description = "Sets user status to DELETED and invalidates all existing tokens.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User deactivated successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @PostMapping("/users/{id}/deactivate")
     public ResponseEntity<ApiResponse<Void>> deactivateUser(@PathVariable Long id) {
         User user = userRepository.findById(id)
@@ -153,6 +176,11 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("User deactivated successfully"));
     }
 
+    @Operation(summary = "Activate user", description = "Sets user status to ACTIVE.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User activated successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @PostMapping("/users/{id}/activate")
     public ResponseEntity<ApiResponse<Void>> activateUser(@PathVariable Long id) {
         User user = userRepository.findById(id)
@@ -163,6 +191,10 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("User activated successfully"));
     }
 
+    @Operation(summary = "Get user statistics", description = "Returns counts of total, active, suspended, and deleted users.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Statistics retrieved")
+    })
     @GetMapping("/stats")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getStats() {
         long totalUsers = userRepository.count();
@@ -179,6 +211,12 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("Statistics retrieved", response));
     }
 
+    @Operation(summary = "Suspend user", description = "Sets user status to SUSPENDED and invalidates all existing tokens. Cannot suspend admin users.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User suspended successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Cannot suspend admin users"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @PostMapping("/users/{id}/suspend")
     public ResponseEntity<ApiResponse<Void>> suspendUser(@PathVariable Long id) {
         User user = userRepository.findById(id)
@@ -197,6 +235,12 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.success("User suspended successfully"));
     }
 
+    @Operation(summary = "Update user role", description = "Changes a user's role (e.g., USER to ADMIN).")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User role updated successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid role name"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User or role not found")
+    })
     @PostMapping("/users/{id}/role")
     public ResponseEntity<ApiResponse<Void>> updateUserRole(
             @PathVariable Long id,

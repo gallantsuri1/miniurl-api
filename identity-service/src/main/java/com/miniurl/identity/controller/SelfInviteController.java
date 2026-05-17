@@ -3,6 +3,9 @@ package com.miniurl.identity.controller;
 import com.miniurl.dto.ApiResponse;
 import com.miniurl.identity.repository.UserRepository;
 import com.miniurl.identity.service.EmailInviteService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -20,6 +23,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/self-invite")
+@Tag(name = "Self-Invite", description = "Self-invitation endpoint for public signup")
 public class SelfInviteController {
 
     private static final Logger logger = LoggerFactory.getLogger(SelfInviteController.class);
@@ -36,6 +40,11 @@ public class SelfInviteController {
         this.restTemplate = restTemplate;
     }
 
+    @Operation(summary = "Send self-invite", description = "Sends a self-invitation email. Requires GLOBAL_USER_SIGNUP feature to be enabled.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Invitation sent"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Self-signup disabled, email already registered, or invalid email")
+    })
     @PostMapping("/send")
     public ResponseEntity<ApiResponse<Void>> sendSelfInvite(@RequestParam("email") String email) {
         try {

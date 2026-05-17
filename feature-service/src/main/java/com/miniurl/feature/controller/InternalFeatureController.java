@@ -4,6 +4,7 @@ import com.miniurl.dto.FeatureFlagDTO;
 import com.miniurl.dto.GlobalFlagDTO;
 import com.miniurl.feature.service.FeatureFlagService;
 import com.miniurl.feature.service.GlobalFlagService;
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +15,7 @@ import java.util.List;
  * Internal endpoints for inter-service feature flag access.
  * Not exposed through the API Gateway.
  */
+@Hidden
 @RestController
 @RequestMapping("/internal/features")
 @RequiredArgsConstructor

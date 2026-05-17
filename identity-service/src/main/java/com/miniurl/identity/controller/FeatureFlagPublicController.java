@@ -6,6 +6,9 @@ import com.miniurl.identity.exception.ResourceNotFoundException;
 import com.miniurl.identity.exception.UnauthorizedException;
 import com.miniurl.identity.repository.UserRepository;
 import com.miniurl.identity.service.JwtService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -24,6 +27,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/features")
+@Tag(name = "Feature Flags", description = "Public feature flag access for authenticated users")
 public class FeatureFlagPublicController {
 
     private static final Logger log = LoggerFactory.getLogger(FeatureFlagPublicController.class);
@@ -43,6 +47,12 @@ public class FeatureFlagPublicController {
     /**
      * Get feature flags for the authenticated user's role.
      */
+    @Operation(summary = "Get feature flags for current user", description = "Returns feature flags based on the authenticated user's role.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Features retrieved"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid or missing authorization header"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getMyRoleFeatures(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -75,6 +85,10 @@ public class FeatureFlagPublicController {
     /**
      * Get all global flags (no authentication required).
      */
+    @Operation(summary = "Get all global flags", description = "Returns all global feature flags. No authentication required.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Global flags retrieved")
+    })
     @GetMapping("/global")
     public ResponseEntity<ApiResponse<Map<String, Object>>> getAllGlobalFlags() {
         List<Map<String, Object>> flags = fetchAllGlobalFlags();

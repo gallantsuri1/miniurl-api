@@ -38,14 +38,7 @@
             <version>${jjwt.version}</version>
         </dependency>
 
-        <!-- Swagger/OpenAPI for DTO annotations -->
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>${springdoc.version}</version>
-        </dependency>
-
-        <!-- Required for Schema annotations -->
+        <!-- Required for Schema annotations (Swagger/OpenAPI) -->
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-api</artifactId>

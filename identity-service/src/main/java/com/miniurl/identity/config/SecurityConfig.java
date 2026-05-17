@@ -34,6 +34,12 @@ public class SecurityConfig {
                     "/api/auth/**",
                     "/.well-known/jwks.json"
                 ).permitAll()
+                // Public endpoints - Swagger/OpenAPI
+                .requestMatchers(
+                    "/v3/api-docs/**",
+                    "/swagger-ui/**",
+                    "/swagger-ui.html"
+                ).permitAll()
                 // Public endpoints - Health and Actuator
                 .requestMatchers(
                     "/actuator/**",

@@ -8,6 +8,9 @@ import com.miniurl.identity.exception.UnauthorizedException;
 import com.miniurl.identity.repository.UserRepository;
 import com.miniurl.identity.service.AuthService;
 import com.miniurl.identity.service.JwtService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -26,6 +29,7 @@ import java.util.*;
  */
 @RestController
 @RequestMapping("/api/settings")
+@Tag(name = "Settings", description = "User settings, data export, and account deletion")
 public class SettingsController {
 
     private static final Logger log = LoggerFactory.getLogger(SettingsController.class);
@@ -43,6 +47,12 @@ public class SettingsController {
         this.restTemplate = restTemplate;
     }
 
+    @Operation(summary = "Export user data", description = "Exports the authenticated user's profile and URLs as a downloadable JSON file.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Data exported successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid or missing authorization header"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @GetMapping("/export")
     public ResponseEntity<?> exportData(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -82,6 +92,13 @@ public class SettingsController {
         return new ResponseEntity<>(exportData, headers, HttpStatus.OK);
     }
 
+    @Operation(summary = "Delete account via settings", description = "Permanently deletes the authenticated user's account. Requires password confirmation.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Account deleted successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid credentials"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @PostMapping("/delete-account")
     public ResponseEntity<ApiResponse<Void>> deleteAccount(
             @Valid @RequestBody DeleteAccountRequest request,

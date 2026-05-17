@@ -19,6 +19,16 @@ eureka:
     serviceUrl:
       defaultZone: ${EUREKA_SERVER_URL:${EUREKA_URL:http://eureka-server:8761/eureka/}}
 
+# Swagger/OpenAPI — enabled by default (non-prod)
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  show-actuator: false
+
 management:
   endpoints:
     web:

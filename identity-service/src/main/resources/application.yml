@@ -67,6 +67,16 @@ jwt:
     public-key-path: ${JWT_RSA_PUBLIC_KEY_PATH:config/keys/public.pem}
     key-id: ${JWT_RSA_KEY_ID:miniurl-rsa-key-1}
 
+# Swagger/OpenAPI — enabled by default (non-prod)
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  show-actuator: false
+
 management:
   endpoints:
     web:

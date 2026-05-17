@@ -1,6 +1,7 @@
 package com.miniurl.url.controller;
 
 import com.miniurl.dto.UrlResponse;
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,6 +13,7 @@ import com.miniurl.url.service.UrlService;
 import java.util.List;
 import java.util.Optional;
 
+@Hidden
 @RestController
 @RequestMapping("/internal/urls")
 @RequiredArgsConstructor

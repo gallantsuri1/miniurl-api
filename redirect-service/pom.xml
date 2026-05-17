@@ -40,6 +40,13 @@
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
 
+        <!-- Swagger/OpenAPI UI (WebFlux variant for reactive stack) -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webflux-ui</artifactId>
+            <version>${springdoc.version}</version>
+        </dependency>
+
         <!-- Common library for DTOs -->
         <dependency>
             <groupId>com.miniurl</groupId>

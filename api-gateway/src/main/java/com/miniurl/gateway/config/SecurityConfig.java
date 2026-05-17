@@ -47,6 +47,8 @@ public class SecurityConfig {
             .authorizeExchange(exchanges -> exchanges
                 // Public endpoints
                 .pathMatchers("/api/auth/**", "/api/features/public/**", "/api/health", "/r/{code}", "/actuator/**").permitAll()
+                // Public endpoints - Swagger/OpenAPI
+                .pathMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/webjars/**").permitAll()
                 // All other requests require authentication
                 .anyExchange().authenticated()
             )

@@ -1,6 +1,7 @@
 package com.miniurl.feature.controller;
 
 import com.miniurl.feature.service.GlobalFlagService;
+import io.swagger.v3.oas.annotations.Hidden;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -11,6 +12,7 @@ import java.util.Map;
  * Internal endpoints for inter-service communication.
  * Not exposed through the API Gateway.
  */
+@Hidden
 @RestController
 @RequestMapping("/internal/global-flags")
 @RequiredArgsConstructor

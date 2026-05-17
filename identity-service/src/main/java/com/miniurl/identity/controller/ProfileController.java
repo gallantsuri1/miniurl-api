@@ -9,6 +9,9 @@ import com.miniurl.identity.exception.UnauthorizedException;
 import com.miniurl.identity.repository.UserRepository;
 import com.miniurl.identity.service.AuthService;
 import com.miniurl.identity.service.JwtService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +29,7 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/profile")
+@Tag(name = "User Profile", description = "Authenticated user profile management")
 public class ProfileController {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileController.class);
@@ -41,6 +45,12 @@ public class ProfileController {
         this.jwtService = jwtService;
     }
 
+    @Operation(summary = "Get current user profile", description = "Returns the authenticated user's profile information.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile retrieved"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid or missing authorization header"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @GetMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> getProfile(
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
@@ -69,6 +79,13 @@ public class ProfileController {
         return ResponseEntity.ok(ApiResponse.success("Profile retrieved", response));
     }
 
+    @Operation(summary = "Update user profile", description = "Updates the authenticated user's profile fields (firstName, lastName, email, theme).")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Profile updated successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request body"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Invalid or missing authorization header"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "User not found")
+    })
     @PutMapping
     public ResponseEntity<ApiResponse<Map<String, Object>>> updateProfile(
             @Valid @RequestBody ProfileUpdateRequest request,
