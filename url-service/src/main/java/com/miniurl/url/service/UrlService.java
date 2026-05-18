@@ -6,7 +6,6 @@ import com.miniurl.dto.PageableRequest;
 import com.miniurl.dto.UrlResponse;
 import com.miniurl.exception.AliasNotAvailableException;
 import com.miniurl.exception.ResourceNotFoundException;
-import com.miniurl.exception.UnauthorizedException;
 import com.miniurl.exception.UrlValidationException;
 import com.miniurl.url.client.RedirectServiceClient;
 import com.miniurl.url.entity.Url;
@@ -273,12 +272,7 @@ public class UrlService {
     @Transactional
     public void deleteUrl(Long urlId, Long userId) {
         Url url = urlRepository.findByIdAndUserId(urlId, userId)
-            .orElseThrow(() -> {
-                if (urlRepository.existsById(urlId)) {
-                    return new UnauthorizedException("You can only delete your own URLs");
-                }
-                return new ResourceNotFoundException("URL not found");
-            });
+            .orElseThrow(() -> new ResourceNotFoundException("URL not found"));
 
         com.miniurl.common.dto.UrlEvent event = com.miniurl.common.dto.UrlEvent.builder()
             .urlId(url.getId())
@@ -302,12 +296,7 @@ public class UrlService {
 
     public UrlResponse getUrlById(Long urlId, Long userId) {
         Url url = urlRepository.findByIdAndUserId(urlId, userId)
-            .orElseThrow(() -> {
-                if (urlRepository.existsById(urlId)) {
-                    return new UnauthorizedException("You can only access your own URLs");
-                }
-                return new ResourceNotFoundException("URL not found");
-            });
+            .orElseThrow(() -> new ResourceNotFoundException("URL not found"));
 
         return convertToResponse(url);
     }

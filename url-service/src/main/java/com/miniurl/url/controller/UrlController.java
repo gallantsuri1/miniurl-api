@@ -30,7 +30,8 @@ public class UrlController {
     @Operation(summary = "Create a short URL", description = "Shortens a given URL for the authenticated user.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL created successfully"),
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request body")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request body"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @PostMapping
     public ResponseEntity<ApiResponse> createUrl(
@@ -42,7 +43,8 @@ public class UrlController {
 
     @Operation(summary = "List user URLs", description = "Returns all URLs belonging to the authenticated user.")
     @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User URLs retrieved successfully")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User URLs retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @GetMapping
     public ResponseEntity<ApiResponse> getUserUrls(
@@ -53,7 +55,8 @@ public class UrlController {
 
     @Operation(summary = "List user URLs (paged)", description = "Returns a paginated list of URLs belonging to the authenticated user.")
     @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User URLs retrieved successfully")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "User URLs retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @GetMapping("/paged")
     public ResponseEntity<ApiResponse> getUserUrlsPaged(
@@ -66,6 +69,7 @@ public class UrlController {
     @Operation(summary = "Get URL by ID", description = "Returns a single URL by its ID. Only accessible by the URL owner.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "URL not found")
     })
     @GetMapping("/{id}")
@@ -79,6 +83,7 @@ public class UrlController {
     @Operation(summary = "Delete URL", description = "Deletes a URL by its ID. Only accessible by the URL owner.")
     @ApiResponses({
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL deleted successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated"),
         @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "URL not found")
     })
     @DeleteMapping("/{id}")
@@ -91,7 +96,8 @@ public class UrlController {
 
     @Operation(summary = "Get URL usage stats", description = "Returns usage statistics for the authenticated user's URLs.")
     @ApiResponses({
-        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL usage stats retrieved successfully")
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "URL usage stats retrieved successfully"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "Not authenticated")
     })
     @GetMapping("/usage-stats")
     public ResponseEntity<ApiResponse> getUsageStats(
